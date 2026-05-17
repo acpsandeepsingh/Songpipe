@@ -29,6 +29,9 @@ import java.nio.charset.StandardCharsets;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import android.util.Log;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.schedulers.Schedulers;
@@ -36,6 +39,7 @@ import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 
 @CapacitorPlugin(name = "YoutubeExtractor")
 public class YoutubeExtractorPlugin extends Plugin {
+    private static final String TAG = "YoutubeExtractorPlugin";
     private static final OkHttpClient FALLBACK_HTTP = new OkHttpClient();
     private static String firstImageUrl(List<Image> images) {
         if (images == null || images.isEmpty()) return "";
@@ -65,6 +69,7 @@ public class YoutubeExtractorPlugin extends Plugin {
         String videoUrl = "https://www.youtube.com/watch?v=" + videoId;
 
         Single.fromCallable(() -> {
+            StringBuilder trace = new StringBuilder("extract:start;");
             StreamingService service = ServiceList.YouTube;
             List<String> candidateUrls = new ArrayList<>();
             candidateUrls.add(videoUrl);
@@ -73,18 +78,28 @@ public class YoutubeExtractorPlugin extends Plugin {
 
             Exception last = null;
             for (String candidate : candidateUrls) {
+                trace.append("candidate=").append(candidate).append(";");
                 for (int attempt = 0; attempt < 3; attempt++) {
                     try {
+                        trace.append("attempt=").append(attempt + 1).append(":newpipe_ok;");
+                        Log.d(TAG, trace.toString());
                         return StreamInfo.getInfo(service, candidate);
                     } catch (Exception e) {
                         last = e;
+                        trace.append("attempt=").append(attempt + 1).append(":newpipe_fail(").append(e.getMessage()).append(");");
                         try { Thread.sleep(450L * (attempt + 1)); } catch (InterruptedException ignored) {}
                     }
                 }
             }
             // Backup fallback: lightweight watch-page player JSON parse when NewPipe fails.
             JSObject backup = tryFallbackExtract(videoId);
-            if (backup != null) return backup;
+            if (backup != null) {
+                trace.append("fallback_html_ok;");
+                Log.d(TAG, trace.toString());
+                return backup;
+            }
+            trace.append("fallback_html_fail;");
+            Log.e(TAG, trace.toString());
             throw last != null ? last : new Exception("Native extraction failed");
         })
         .subscribeOn(Schedulers.io())
@@ -162,6 +177,43 @@ public class YoutubeExtractorPlugin extends Plugin {
                             if (kv.startsWith("url=")) {
                                 audioUrl = URLDecoder.decode(kv.substring(4), StandardCharsets.UTF_8);
                                 break;
+                            }
+                        }
+                    }
+                }
+
+                if ((audioUrl == null || audioUrl.isEmpty())) {
+                    // 3) Parse ytInitialPlayerResponse/adaptiveFormats if direct regex failed
+                    int idx = html.indexOf("ytInitialPlayerResponse");
+                    if (idx != -1) {
+                        int start = html.indexOf("{", idx);
+                        int end = html.indexOf(";</script>", start);
+                        if (start != -1 && end != -1) {
+                            String jsonRaw = html.substring(start, end);
+                            JSONObject pr = new JSONObject(jsonRaw);
+                            JSONObject sd = pr.optJSONObject("streamingData");
+                            if (sd != null) {
+                                JSONArray af = sd.optJSONArray("adaptiveFormats");
+                                if (af != null) {
+                                    for (int i = 0; i < af.length(); i++) {
+                                        JSONObject f = af.optJSONObject(i);
+                                        if (f == null) continue;
+                                        String mime = f.optString("mimeType", "");
+                                        if (!mime.contains("audio")) continue;
+                                        String directUrl = f.optString("url", "");
+                                        if (!directUrl.isEmpty()) { audioUrl = directUrl; break; }
+                                        String cipherText = f.optString("signatureCipher", f.optString("cipher", ""));
+                                        if (!cipherText.isEmpty()) {
+                                            for (String kv : cipherText.split("&")) {
+                                                if (kv.startsWith("url=")) {
+                                                    audioUrl = URLDecoder.decode(kv.substring(4), StandardCharsets.UTF_8);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if (audioUrl != null && !audioUrl.isEmpty()) break;
+                                    }
+                                }
                             }
                         }
                     }
