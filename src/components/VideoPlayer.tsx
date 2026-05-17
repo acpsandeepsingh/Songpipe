@@ -60,6 +60,15 @@ export default function VideoPlayer({ video }: { video: any }) {
                 description: nativeResult.description,
                 formats: nativeResult.formats
              };
+
+             // If native extraction already contains playable streams, skip backend dependency.
+             const hasNativeStreams =
+               (nativeData.formats?.audio?.length || 0) > 0 ||
+               (nativeData.formats?.video?.length || 0) > 0;
+             if (hasNativeStreams) {
+               setVideoInfo(nativeData);
+               return;
+             }
           }
         } catch (nativeErr) {
           console.warn("Native bridge unavailable or failed:", nativeErr);
