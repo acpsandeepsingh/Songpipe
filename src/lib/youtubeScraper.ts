@@ -2,16 +2,19 @@ import axios from 'axios';
 
 export class YouTubeScraper {
   private static HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.164 Mobile Safari/537.36',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'X-YouTube-Client-Name': '1',
+    'X-YouTube-Client-Version': '2.20240210.00.00'
   };
 
   static async getTrending() {
     try {
-      console.log("[Scraper] Fetching trending page...");
+      console.log("[Scraper] Fetching trending music...");
+      // Using the music-specific trending endpoint often used by scrapers
       const response = await axios.get('https://www.youtube.com/feed/trending?bp=4gINGgt5dG1hX2NoYXJ0cw%3D%3D', {
-        headers: this.HEADERS
+        headers: { ...this.HEADERS, 'Referer': 'https://www.youtube.com/' }
       });
       return this.parseInitialData(response.data);
     } catch (error) {
@@ -23,10 +26,19 @@ export class YouTubeScraper {
   static async search(query: string) {
     try {
       console.log(`[Scraper] Searching for: ${query}`);
-      const response = await axios.get(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D`, {
-        headers: this.HEADERS
+      // Use PBJ and Music identifiers
+      const response = await axios.get(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D&pbj=1`, {
+        headers: {
+          ...this.HEADERS,
+          'X-YouTube-Client-Name': '1',
+          'X-YouTube-Client-Version': '2.20240210.00.00'
+        }
       });
-      return this.parseInitialData(response.data);
+      
+      let html = response.data;
+      if (typeof html !== 'string') html = JSON.stringify(html);
+      
+      return this.parseInitialData(html);
     } catch (error) {
       console.error("[Scraper] Search fetch failed:", error);
       return [];
@@ -36,41 +48,102 @@ export class YouTubeScraper {
   static async getVideoInfo(videoId: string) {
     try {
       console.log(`[Scraper] Fetching info for: ${videoId}`);
-      const response = await axios.get(`https://www.youtube.com/watch?v=${videoId}`, {
+      
+      // Try 1: Standard Watch page with PBJ
+      let response = await axios.get(`https://www.youtube.com/watch?v=${videoId}&pbj=1`, {
         headers: this.HEADERS
       });
-      const html = response.data;
+      let html = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
       
-      // Extract ytInitialPlayerResponse
-      const playerStart = html.indexOf('var ytInitialPlayerResponse = ');
-      if (playerStart !== -1) {
-        const start = playerStart + 'var ytInitialPlayerResponse = '.length;
-        const end = html.indexOf(';</script>', start);
-        if (end !== -1) {
-          const jsonStr = html.substring(start, end);
-          return JSON.parse(jsonStr);
-        }
+      let info = this.extractPlayerResponse(html);
+      
+      // Try 2: Embed page (often has cleaner JSON and stays up longer)
+      if (!info) {
+        console.log(`[Scraper] Watch page failed for ${videoId}, trying Embed...`);
+        response = await axios.get(`https://www.youtube.com/embed/${videoId}`, {
+          headers: { ...this.HEADERS, 'Referer': 'https://www.youtube.com/' }
+        });
+        html = response.data;
+        info = this.extractPlayerResponse(html);
       }
-      return null;
+      
+      return info;
     } catch (error) {
       console.error("[Scraper] Info fetch failed:", error);
       return null;
     }
   }
 
+  private static extractPlayerResponse(html: string) {
+    try {
+      // Pattern 1: ytInitialPlayerResponse = {...}
+      let start = html.indexOf('ytInitialPlayerResponse = ');
+      if (start !== -1) {
+        start += 'ytInitialPlayerResponse = '.length();
+        const end = html.indexOf(';</script>', start);
+        if (end !== -1) return JSON.parse(html.substring(start, end));
+      }
+      
+      // Pattern 2: "ytInitialPlayerResponse":{...}
+      start = html.indexOf('"ytInitialPlayerResponse":');
+      if (start !== -1) {
+        start += '"ytInitialPlayerResponse":'.length;
+        // Find matching closing brace for the JSON object
+        let depth = 0;
+        let end = -1;
+        for (let i = start; i < html.length; i++) {
+          if (html[i] === '{') depth++;
+          else if (html[i] === '}') {
+            depth--;
+            if (depth === 0) {
+              end = i + 1;
+              break;
+            }
+          }
+        }
+        if (end !== -1) return JSON.parse(html.substring(start, end));
+      }
+
+      // Pattern 3: PBJ array response
+      if (html.trim().startsWith('[')) {
+         const pbj = JSON.parse(html);
+         const playerEntry = pbj.find((e: any) => e.playerResponse);
+         if (playerEntry) return playerEntry.playerResponse;
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   private static parseInitialData(html: string) {
     try {
-      const jsonStart = html.indexOf('var ytInitialData = ');
-      if (jsonStart === -1) return [];
+      // Try 1: ytInitialData variable
+      const jsonStart = html.indexOf('ytInitialData = ');
+      if (jsonStart !== -1) {
+        const start = jsonStart + 'ytInitialData = '.length;
+        const jsonEnd = html.indexOf(';</script>', start);
+        if (jsonEnd !== -1) {
+          const jsonStr = html.substring(start, jsonEnd);
+          return this.extractVideos(JSON.parse(jsonStr));
+        }
+      }
       
-      const start = jsonStart + 'var ytInitialData = '.length;
-      const jsonEnd = html.indexOf(';</script>', start);
-      if (jsonEnd === -1) return [];
-      
-      const jsonStr = html.substring(start, jsonEnd);
-      const data = JSON.parse(jsonStr);
-      
-      return this.extractVideos(data);
+      // Try 2: PBJ response (array of objects)
+      if (html.trim().startsWith('[')) {
+        const pbj = JSON.parse(html);
+        const dataEntry = pbj.find((e: any) => e.response)?.response || pbj.find((e: any) => e.data)?.data;
+        if (dataEntry) return this.extractVideos(dataEntry);
+      }
+
+      // Try 3: Search within the whole HTML for "ytInitialData":{...}
+      const match = html.match(/"ytInitialData":(\{.+?\})/);
+      if (match) {
+        return this.extractVideos(JSON.parse(match[1]));
+      }
+
+      return [];
     } catch (e) {
       console.error("[Scraper] Parse failed:", e);
       return [];

@@ -30,53 +30,72 @@ async function startServer() {
   };
 
   const normalizeVideoData = (raw: any) => {
+    if (!raw) return null;
+    
+    // Support yts, InnerTube, and Scraper formats
+    const id = raw.id || raw.videoId || raw.v || (raw.navigationEndpoint?.watchEndpoint?.videoId);
+    const title = raw.title?.toString() || raw.title?.simpleText || raw.text || raw.title?.runs?.[0]?.text || "Untitled";
+    
+    // Thumbnail extraction
+    let thumbnail = "";
+    if (raw.thumbnails && raw.thumbnails.length > 0) thumbnail = raw.thumbnails[0].url;
+    else if (raw.thumbnail) thumbnail = raw.thumbnail;
+    else if (raw.image) thumbnail = raw.image;
+    else if (raw.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url) thumbnail = raw.thumbnailRenderer.musicThumbnailRenderer.thumbnail.thumbnails[0].url;
+    
+    // Channel name
+    const channelName = raw.author?.name || raw.author || raw.channelName || raw.ownerText?.runs?.[0]?.text || raw.shortBylineText?.runs?.[0]?.text || "YouTube Music";
+    
+    // Stats
+    const views = raw.view_count?.toString() || raw.viewCountText?.simpleText || raw.flexColumns?.[2]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || "0 views";
+    const duration = raw.duration?.toString() || raw.lengthText?.simpleText || raw.timestamp || "0:00";
+    
     return {
-      id: raw.id || raw.videoId || raw.v || (raw.navigationEndpoint?.watchEndpoint?.videoId),
-      title: raw.title?.toString() || raw.title?.simpleText || raw.text || "Untitled",
-      thumbnail: raw.thumbnails?.[0]?.url || raw.thumbnail || raw.image || (raw.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url) || "",
-      channelName: raw.author?.name || raw.author || raw.channelName || raw.ownerText?.runs?.[0]?.text || "YouTube Artist",
-      views: raw.view_count?.toString() || raw.viewCountText?.simpleText || "0 views",
+      id,
+      title,
+      thumbnail,
+      channelName,
+      views,
       uploadedAt: raw.published?.toString() || raw.publishedTimeText?.simpleText || "Recently",
-      duration: raw.duration?.toString() || raw.lengthText?.simpleText || "0:00"
+      duration
     };
   };
 
   app.use(cors());
   app.use(express.json());
 
-  // Logging Middleware for /api
-  app.use("/api", (req, res, next) => {
-    console.log(`[API Request] ${req.method} ${req.url}`);
+  const apiRouter = express.Router();
+
+  // Middleware for all API routes
+  apiRouter.use((req, res, next) => {
+    console.log(`[API] ${req.method} ${req.url}`);
     res.setHeader('Content-Type', 'application/json');
     next();
   });
 
-  // Health Check
-  app.get("/api/health", (req, res) => {
+  // Health
+  apiRouter.get("/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  // Trending Endpoint
-  app.get("/api/trending", async (req, res) => {
+  // Trending
+  apiRouter.get("/trending", async (req, res) => {
     try {
-      console.log("[API] Trending request start");
+      console.log("[API] Trending requested");
       let items = await YouTubeScraper.getTrending();
       
       if (items.length === 0) {
-        console.warn("[API] Scraper yielded no results, falling back to InnerTube");
+        console.warn("[API] Scraper failed, falling back to InnerTube");
         const client = await getYT();
         if (client) {
           const trending = await client.getTrending();
-          const musicTab = trending.tabs?.find((t: any) => t.title === 'Music' || t.title?.toString() === 'Music');
-          const videos = musicTab ? (musicTab.content?.contents || []) : trending.videos;
-          if (videos && videos.length > 0) {
-            items = videos.map(normalizeVideoData);
-          }
+          const videos = trending.videos;
+          if (videos && videos.length > 0) items = videos.map(normalizeVideoData);
         }
       }
 
       if (items.length === 0) {
-        console.warn("[API] All methods failed, using yt-search fallback");
+        console.warn("[API] All methods failed, using yt-search");
         const results = await yts({ query: "trending music videos", type: 'video' });
         items = results.videos.map(normalizeVideoData);
       }
@@ -88,26 +107,25 @@ async function startServer() {
     }
   });
 
-  // Search Endpoint
-  app.get("/api/search", async (req, res) => {
+  // Search
+  apiRouter.get("/search", async (req, res) => {
     try {
       const query = req.query.q as string;
       if (!query) return res.status(400).json({ error: "Query required" });
       
-      console.log(`[API] Search request for: ${query}`);
+      console.log(`[API] Search for: ${query}`);
       let items = await YouTubeScraper.search(query);
       
       if (items.length === 0) {
-        console.warn("[API] Scraper search failed, falling back to InnerTube");
+        console.warn("[API] Scraper failed, falling back to InnerTube");
         const client = await getYT();
         if (client) {
           const search = await client.search(query, { type: 'video' });
-          items = search.results?.filter((v: any) => v.type === 'Video').map(normalizeVideoData) || [];
+          items = search.results?.map(normalizeVideoData) || [];
         }
       }
 
       if (items.length === 0) {
-        console.warn("[API] Search fallback to yt-search");
         const results = await yts(query);
         items = results.videos.map(normalizeVideoData);
       }
@@ -119,112 +137,65 @@ async function startServer() {
     }
   });
 
-  // Video Info Endpoint
-  app.get("/api/video-info", async (req, res) => {
-    const videoId = req.query.id as string;
+  // Video Info
+  apiRouter.get("/video-info", async (req, res) => {
+    const videoId = (req.query.id as string) || (req.params.id as string);
     const isNative = req.headers['x-native-mode'] === 'true' || req.query.native === 'true';
     
     try {
       if (!videoId) return res.status(400).json({ error: "Video ID required" });
-      console.log(`[API] Info request for: ${videoId}`);
+      console.log(`[API] Info for: ${videoId}`);
       
-      const client = await getYT();
-      let info: any;
-      try {
-        info = await client?.getInfo(videoId);
-      } catch (e: any) {
-        console.error("[API] InnerTube getInfo failed:", e.message);
-      }
-
-      if (info) {
-        const streamingData = info.streaming_data || info.playability_status?.streaming_data;
-        const basicInfo = info.basic_info;
-        const adaptiveFormats = streamingData?.adaptive_formats || [];
-        const regularFormats = streamingData?.formats || [];
-
-        const processFormat = (f: any) => {
-          let directUrl = "";
-          try {
-            directUrl = f.decipher ? f.decipher(client?.session.player) : (f.url || "");
-          } catch (e) {
-            directUrl = f.url || "";
-          }
-          return {
-            url: directUrl,
-            proxyUrl: directUrl ? `/api/stream?url=${encodeURIComponent(directUrl)}${isNative ? '&native=true' : ''}` : "",
-            quality: f.quality_label || f.audio_quality || f.quality || 'Standard',
-            container: f.mime_type || 'video/mp4',
-            bitrate: f.bitrate,
-            id: f.itag
-          };
-        };
-
-        return res.json({
-          ...normalizeVideoData(basicInfo),
-          formats: {
-            audio: adaptiveFormats.filter((f: any) => f.has_audio && !f.has_video).map(processFormat),
-            video: [...regularFormats, ...adaptiveFormats.filter((f: any) => f.has_video)].map(processFormat)
-          }
-        });
-      }
-
-      // NEW: Scraper fallback (NewPipe-like)
-      console.log("[API] InnerTube failed, trying Scraper extraction...");
       const playerResponse = await YouTubeScraper.getVideoInfo(videoId);
-      if (playerResponse && playerResponse.streamingData) {
-        const sd = playerResponse.streamingData;
+      if (playerResponse && playerResponse.videoDetails) {
+        const sd = playerResponse.streamingData || {};
         const formats = [...(sd.formats || []), ...(sd.adaptiveFormats || [])];
-        const processScrapedFormat = (f: any) => {
-          const directUrl = f.url || f.signatureCipher || f.cipher; // Note: cipher needs deciphering which we can't easily do without InnerTube session
-          return {
-            url: directUrl,
-            proxyUrl: directUrl ? `/api/stream?url=${encodeURIComponent(directUrl)}${isNative ? '&native=true' : ''}` : "",
-            quality: f.qualityLabel || f.quality || 'Standard',
-            container: f.mimeType,
-            bitrate: f.bitrate
-          };
-        };
+        const processScrapedFormat = (f: any) => ({
+          url: f.url || f.signatureCipher || f.cipher,
+          proxyUrl: (f.url || f.signatureCipher || f.cipher) ? `/api/stream?url=${encodeURIComponent(f.url || f.signatureCipher || f.cipher)}${isNative ? '&native=true' : ''}` : "",
+          quality: f.qualityLabel || f.quality || 'Standard',
+          container: f.mimeType,
+          bitrate: f.bitrate,
+          id: f.itag
+        });
 
         return res.json({
           ...normalizeVideoData(playerResponse.videoDetails),
           formats: {
-            audio: formats.filter(f => f.mimeType?.includes('audio') && !f.mimeType?.includes('video')).map(processScrapedFormat),
+            audio: formats.filter(f => f.mimeType?.includes('audio')).map(processScrapedFormat),
             video: formats.filter(f => f.mimeType?.includes('video')).map(processScrapedFormat)
           }
         });
       }
 
-      // Fallback to ytdl-core
-      console.warn("[API] Using ytdl fallback for info");
-      const ytdlInfo = await ytdl.getInfo(videoId).catch(() => null);
-      if (ytdlInfo) {
+      const client = await getYT();
+      let info = await client?.getInfo(videoId);
+      if (info) {
+        const streamingData = info.streaming_data || info.playability_status?.streaming_data;
+        const adaptiveFormats = streamingData?.adaptive_formats || [];
+        const processFormat = (f: any) => ({
+          url: f.url || "",
+          proxyUrl: f.url ? `/api/stream?url=${encodeURIComponent(f.url)}${isNative ? '&native=true' : ''}` : "",
+          quality: f.quality_label || f.quality || 'Standard',
+          container: f.mime_type
+        });
         return res.json({
-          ...normalizeVideoData(ytdlInfo.videoDetails),
+          ...normalizeVideoData(info.basic_info),
           formats: {
-            audio: ytdlInfo.formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
-              proxyUrl: `/api/stream?url=${encodeURIComponent(f.url)}`,
-              quality: f.audioQuality,
-              container: f.mimeType
-            })),
-            video: ytdlInfo.formats.filter(f => f.hasVideo).map(f => ({
-              proxyUrl: `/api/stream?url=${encodeURIComponent(f.url)}`,
-              quality: f.qualityLabel,
-              container: f.mimeType
-            }))
+            audio: adaptiveFormats.filter((f: any) => f.has_audio && !f.has_video).map(processFormat),
+            video: adaptiveFormats.filter((f: any) => f.has_video).map(processFormat)
           }
         });
       }
 
-      const searchRes = await yts({ videoId });
-      res.json({ ...normalizeVideoData(searchRes), isMetadataOnly: true, error: true });
+      res.status(404).json({ error: "Could not extract video info" });
     } catch (error: any) {
-      console.error("[API] Video info critical failure:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  // Stream Proxy Endpoint
-  app.get("/api/stream", async (req, res) => {
+  // Stream proxy
+  apiRouter.get("/stream", async (req, res) => {
     try {
       const url = req.query.url as string;
       if (!url) return res.status(400).send("URL required");
@@ -251,6 +222,8 @@ async function startServer() {
       res.status(500).send(e.message);
     }
   });
+
+  app.use("/api", apiRouter);
 
   // Final Error Handler for API
   app.use("/api", (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
