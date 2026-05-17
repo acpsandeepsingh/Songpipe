@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import VideoGrid from './components/VideoGrid';
@@ -22,6 +22,13 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    (window as any).toggleApiSettings = () => setIsSettingsOpen(true);
+    return () => {
+      delete (window as any).toggleApiSettings;
+    };
+  }, []);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);

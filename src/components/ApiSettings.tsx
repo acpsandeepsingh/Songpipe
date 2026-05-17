@@ -13,7 +13,12 @@ export default function ApiSettings({ isOpen, onClose }: { isOpen: boolean, onCl
   }, []);
 
   const handleSave = () => {
-    localStorage.setItem('VITE_API_URL', url);
+    const clean = url.trim().replace(/\/+$/, '');
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      alert('Please enter a valid URL starting with http:// or https://');
+      return;
+    }
+    localStorage.setItem('VITE_API_URL', clean);
     onClose();
     window.location.reload();
   };
