@@ -5,6 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { Innertube } from 'youtubei.js';
 import yts from 'yt-search';
 import axios from 'axios';
+import ytdl from '@distube/ytdl-core';
 
 async function startServer() {
   const app = express();
@@ -174,15 +175,71 @@ async function startServer() {
 
       console.log(`Extracting for: ${videoId}`);
       const client = await getYT();
-      const info = await client.getInfo(videoId);
       
-      const adaptiveFormats = info.streaming_data?.adaptive_formats || [];
-      const regularFormats = info.streaming_data?.formats || [];
+      let info: any;
+      let streamingData: any;
+      let basicInfo: any;
+
+      try {
+        // Method 1: Innertube getInfo (Most detailed)
+        info = await client.getInfo(videoId);
+        streamingData = info.streaming_data || (info as any).playability_status?.streaming_data;
+        basicInfo = info.basic_info;
+      } catch (e: any) {
+        console.warn(`Innertube getInfo failed for ${videoId}:`, e.message);
+        try {
+          // Method 2: Innertube getBasicInfo
+          info = await client.getBasicInfo(videoId);
+          streamingData = info.streaming_data || (info as any).playability_status?.streaming_data;
+          basicInfo = info.basic_info;
+        } catch (e2: any) {
+          console.warn(`Innertube getBasicInfo failed, trying ytdl-core...`);
+          // Method 3: YTDL-Core (Very robust fallback)
+          const ytdlInfo = await ytdl.getInfo(videoId);
+          const bestThumbnail = ytdlInfo.videoDetails.thumbnails.pop();
+          
+          return res.json({
+            id: videoId,
+            title: ytdlInfo.videoDetails.title,
+            description: ytdlInfo.videoDetails.description,
+            thumbnails: bestThumbnail ? [bestThumbnail] : [],
+            author: {
+              name: ytdlInfo.videoDetails.author.name,
+              avatar: ytdlInfo.videoDetails.author.thumbnails?.[0]?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${ytdlInfo.videoDetails.author.name}`
+            },
+            viewCount: ytdlInfo.videoDetails.viewCount,
+            publishDate: ytdlInfo.videoDetails.publishDate || 'Recently',
+            formats: {
+              audio: ytdlInfo.formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
+                url: f.url,
+                proxyUrl: `/api/stream?url=${encodeURIComponent(f.url)}`,
+                quality: f.audioQuality || 'Standard',
+                container: f.mimeType || 'audio/mp4',
+                bitrate: f.bitrate
+              })),
+              video: ytdlInfo.formats.filter(f => f.hasVideo).map(f => ({
+                url: f.url,
+                proxyUrl: `/api/stream?url=${encodeURIComponent(f.url)}`,
+                quality: f.qualityLabel || 'Standard',
+                container: f.mimeType || 'video/mp4',
+                bitrate: f.bitrate
+              }))
+            }
+          });
+        }
+      }
+      
+      if (!streamingData && !basicInfo) {
+        throw new Error("No playback data available (potentially age restricted or private)");
+      }
+
+      const adaptiveFormats = streamingData?.adaptive_formats || [];
+      const regularFormats = streamingData?.formats || [];
 
       const processFormat = (f: any) => {
         let directUrl = "";
         try {
-          directUrl = f.decipher(client.session.player);
+          directUrl = f.decipher ? f.decipher(client.session.player) : (f.url || "");
         } catch (e) {
           directUrl = f.url || "";
         }
@@ -190,8 +247,8 @@ async function startServer() {
         return {
           url: directUrl,
           proxyUrl: directUrl ? `/api/stream?url=${encodeURIComponent(directUrl)}` : "",
-          quality: f.quality_label || f.audio_quality || 'Standard',
-          container: f.mime_type,
+          quality: f.quality_label || f.audio_quality || f.quality || 'Standard',
+          container: f.mime_type || 'video/mp4',
           bitrate: f.bitrate,
           id: f.itag
         };
@@ -202,15 +259,15 @@ async function startServer() {
 
       res.json({
         id: videoId,
-        title: info.basic_info.title,
-        description: (info.basic_info as any).short_description || (info.basic_info as any).description,
-        thumbnails: info.basic_info.thumbnail,
+        title: basicInfo?.title || "Untitled Video",
+        description: basicInfo?.short_description || basicInfo?.description || "",
+        thumbnails: basicInfo?.thumbnail || [],
         author: {
-          name: info.basic_info.author,
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${info.basic_info.author}`
+          name: basicInfo?.author || "Unknown Artist",
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${basicInfo?.author || 'YouTube'}`
         },
-        viewCount: info.basic_info.view_count,
-        publishDate: info.basic_info.is_live ? 'LIVE' : 'Recently',
+        viewCount: basicInfo?.view_count || "0",
+        publishDate: basicInfo?.is_live ? 'LIVE' : 'Recently',
         formats: {
           audio: audioFormats.length > 0 ? audioFormats : regularFormats.map(processFormat),
           video: videoFormats

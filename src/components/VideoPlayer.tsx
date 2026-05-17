@@ -82,17 +82,17 @@ export default function VideoPlayer({ video }: { video: any }) {
     );
   }
 
-  if (!videoInfo || videoInfo.error) {
+  if (!videoInfo || videoInfo.error || !videoInfo.formats) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] text-center p-8 bg-[#121212] sm:rounded-xl border border-white/5 mx-4 sm:mx-0">
         <div className="w-16 h-16 bg-red-600/10 rounded-full flex items-center justify-center mb-4">
           <Share2 className="w-8 h-8 text-red-500" />
         </div>
-        <p className="text-white font-bold mb-2">Extraction Limited</p>
+        <p className="text-white font-bold mb-2">Streaming Limited</p>
         <p className="text-sm text-[#aaa] mb-6 max-w-xs px-6">
           {videoInfo?.message?.includes('Sign in') 
             ? "This video is age-restricted or requires authentication." 
-            : "Direct playback is currently limited for this video on cloud servers. Try the 'Extract' button below or open on YouTube."}
+            : "Direct streaming is limited on cloud servers for this video. Use the 'Extract' button for specific streams or watch on YouTube."}
         </p>
         <div className="flex flex-col gap-3 w-full max-w-[200px]">
           <button 
@@ -105,14 +105,14 @@ export default function VideoPlayer({ video }: { video: any }) {
             onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
             className="bg-white/10 text-white px-8 py-2.5 rounded-full font-bold hover:bg-white/20 transition-colors"
           >
-            Watch on YT
+            Open Original
           </button>
         </div>
       </div>
     );
   }
 
-  const bestVideo = videoInfo?.formats?.video?.find((f: any) => f.quality.includes('720') || f.quality.includes('480'))?.proxyUrl 
+  const bestVideo = videoInfo?.formats?.video?.find((f: any) => f.quality && (f.quality.includes('720') || f.quality.includes('480')))?.proxyUrl 
                   || videoInfo?.formats?.video?.[0]?.proxyUrl 
                   || videoInfo?.formats?.video?.[0]?.url;
 
