@@ -28,7 +28,13 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
   
-  // Prevent aggressive caching on mobile
+  // Debug Request Logger
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      console.log(`[API] ${req.method} ${req.path} ${req.query.id || ''}`);
+    }
+    next();
+  });
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -266,8 +272,10 @@ async function startServer() {
   });
 
   app.get("/api/video-info", async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
     const videoId = req.query.id as string;
-    const isNative = req.headers['x-native-mode'] === 'true';
+    const isNative = req.headers['x-native-mode'] === 'true' || req.query.native === 'true';
+    
     try {
       if (!videoId) return res.status(400).json({ error: "Video ID required" });
 
@@ -338,16 +346,29 @@ async function startServer() {
         } catch (e2: any) {
           console.error(`Final extraction failure for ${videoId}:`, e2.message);
           // Method 3: Search fallback (Only metadata, no streams)
-          const results = await yts({ videoId });
-          return res.json({
-            id: videoId,
-            title: (results as any).title,
-            thumbnails: [{ url: (results as any).thumbnail }],
-            author: { name: (results as any).author?.name },
-            formats: { audio: [], video: [] },
-            error: true,
-            message: e2.message
-          });
+          try {
+            const results = await yts({ videoId });
+            if (results) {
+              return res.json({
+                id: videoId,
+                title: (results as any).title,
+                description: (results as any).description,
+                thumbnails: [{ url: (results as any).thumbnail }],
+                author: { 
+                  name: (results as any).author?.name || "YouTube Artist",
+                  avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent((results as any).author?.name || 'YouTube')}`
+                },
+                viewCount: (results as any).views,
+                publishDate: (results as any).ago || 'Unknown',
+                formats: { audio: [], video: [] },
+                error: true,
+                message: e2.message || "Streams unavailable on server",
+                isMetadataOnly: true
+              });
+            }
+          } catch (e3) {}
+          
+          throw e2;
         }
       }
 
@@ -423,8 +444,20 @@ async function startServer() {
   });
 
   // API 404 handler to prevent HTML responses for API calls
-  app.all('/api/*', (req, res) => {
+  app.all('/api/*', (req, res, next) => {
+    if (res.headersSent) return next();
     res.status(404).json({ error: 'API route not found', path: req.path });
+  });
+
+  // Global Error Handler for API
+  app.use('/api', (err: any, req: any, res: any, next: any) => {
+    console.error("Global API Error:", err);
+    if (res.headersSent) return next(err);
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      message: err.message,
+      path: req.path
+    });
   });
 
   // Vite middleware for development

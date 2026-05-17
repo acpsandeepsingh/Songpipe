@@ -6,6 +6,8 @@ import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import YoutubeExtractor from '../lib/nativeBridge';
 import { Capacitor } from '@capacitor/core';
 
+import { logger } from '../lib/logger';
+
 export default function VideoPlayer({ video }: { video: any }) {
   const [videoInfo, setVideoInfo] = useState<any>(null);
   const [nativeInfo, setNativeInfo] = useState<any>(null);
@@ -136,7 +138,7 @@ export default function VideoPlayer({ video }: { video: any }) {
     );
   }
 
-  if (!videoInfo || videoInfo.error || !videoInfo.formats || (videoInfo.formats.audio.length === 0 && videoInfo.formats.video.length === 0)) {
+  if (!videoInfo || videoInfo.error || videoInfo.isMetadataOnly || !videoInfo.formats || (videoInfo.formats.audio.length === 0 && videoInfo.formats.video.length === 0)) {
     const copyFullError = () => {
       const fullLog = {
         appState: 'Extraction Error',
@@ -151,14 +153,28 @@ export default function VideoPlayer({ video }: { video: any }) {
       navigator.clipboard.writeText(text).then(() => {
         alert("CRITICAL ERROR LOG COPIED!\nPost this to the dev chat so we can fix Android 15 playback.");
       }).catch(err => {
-        // Fallback for some browsers
         const textarea = document.createElement('textarea');
         textarea.value = text;
         document.body.appendChild(textarea);
         textarea.select();
         document.execCommand('copy');
         document.body.removeChild(textarea);
-        alert("Error log copied (fallback method)!");
+        alert("Error log copied!");
+      });
+    };
+
+    const copySessionLog = () => {
+      const text = logger.getFullLog();
+      navigator.clipboard.writeText(text).then(() => {
+        alert("FULL SESSION LOG COPIED!\nThis contains every error since the app opened.");
+      }).catch(err => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert("Session log copied!");
       });
     };
 
@@ -167,11 +183,11 @@ export default function VideoPlayer({ video }: { video: any }) {
         <div className="w-20 h-20 bg-red-600/10 rounded-full flex items-center justify-center mb-6 border border-red-600/20">
           <Share2 className="w-10 h-10 text-red-600" />
         </div>
-        <h3 className="text-white font-black text-xl mb-3 tracking-tighter uppercase">Extraction Blocked</h3>
-        <p className="text-sm text-[#aaa] mb-8 max-w-xs px-2 font-medium leading-relaxed">
+        <h3 className="text-white font-black text-xl mb-3 tracking-tighter uppercase text-center">Extraction Blocked</h3>
+        <p className="text-sm text-[#aaa] mb-8 max-w-sm px-2 font-medium leading-relaxed text-center">
           {videoInfo?.message?.includes('Sign in') 
-            ? "YouTube requires authentication for this content. Use Original button." 
-            : "Direct streaming failed. This is common on cloud servers. Use the diagnostics below."}
+            ? "YouTube requires authentication for this content. Use the Original button." 
+            : "Video extraction failed. If you are on Android 15, please copy the System Logs using the icon in the top header and share them."}
         </p>
 
         {videoInfo?.message && (
@@ -200,7 +216,13 @@ export default function VideoPlayer({ video }: { video: any }) {
                onClick={copyFullError}
                className="bg-white/5 text-[#aaa] px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
              >
-               COPY LOG
+               ERROR LOG
+             </button>
+             <button 
+               onClick={copySessionLog}
+               className="bg-white/5 text-[#aaa] px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
+             >
+               FULL SESSION
              </button>
              <button 
                onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}

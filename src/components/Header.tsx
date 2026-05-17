@@ -1,5 +1,6 @@
-import { Search, Menu, Video, Bell, User, Mic, Music, ArrowLeft, X } from 'lucide-react';
+import { Search, Menu, Video, Bell, User, Mic, Music, ArrowLeft, X, Terminal } from 'lucide-react';
 import React, { useState } from 'react';
+import { logger } from '../lib/logger';
 
 export default function Header({ onSearch }: { onSearch: (query: string) => void }) {
   const [query, setQuery] = useState('');
@@ -11,6 +12,13 @@ export default function Header({ onSearch }: { onSearch: (query: string) => void
       onSearch(query);
       setIsMobileSearchOpen(false);
     }
+  };
+
+  const copySessionLog = () => {
+    const text = logger.getFullLog();
+    navigator.clipboard.writeText(text).then(() => {
+      alert("System Logs copied!");
+    });
   };
 
   if (isMobileSearchOpen) {
@@ -53,8 +61,12 @@ export default function Header({ onSearch }: { onSearch: (query: string) => void
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-[#e62117] flex items-center justify-between px-3 sm:px-4 z-50 shadow-xl pt-safe border-b border-black/10">
       <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-        <button className="p-2 hover:bg-black/10 rounded-full transition-colors lg:hidden">
-          <Menu className="w-7 h-7 text-white" />
+        <button 
+          onClick={copySessionLog}
+          className="p-2 hover:bg-black/10 rounded-full transition-colors"
+          title="Copy System Logs"
+        >
+          <Terminal className="w-6 h-6 text-white" />
         </button>
         <div className="flex items-center gap-2 cursor-pointer active:scale-95 transition-transform" onClick={() => window.location.reload()}>
           <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-inner">

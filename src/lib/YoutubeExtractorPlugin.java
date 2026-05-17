@@ -32,31 +32,59 @@ public class YoutubeExtractorPlugin extends Plugin {
 
         new Thread(() -> {
             try {
-                java.net.URL url = new java.net.URL("https://www.youtube.com/watch?v=" + videoId);
+                // Try 1: Web Scrape (standard)
+                java.net.URL url = new java.net.URL("https://www.youtube.com/watch?v=" + videoId + "&pbj=1");
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "com.google.android.youtube/19.11.38 (Linux; U; Android 14; en_US) gzip");
-                conn.setRequestProperty("X-Android-Package", "com.google.android.youtube");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.164 Mobile Safari/537.36");
+                conn.setRequestProperty("X-YouTube-Client-Name", "1");
+                conn.setRequestProperty("X-YouTube-Client-Version", "2.20240210.00.00");
                 
                 java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
                 String inputLine;
                 StringBuilder content = new StringBuilder();
                 while ((inputLine = in.readLine()) != null) {
                     content.append(inputLine);
-                    if (content.length() > 500000) break; // Limit to 500kb
+                    if (content.length() > 800000) break; 
                 }
                 in.close();
 
                 String html = content.toString();
                 String playerResponse = "";
                 
-                // Try to extract ytInitialPlayerResponse using regex-like logic
+                // Pattern 1: ytInitialPlayerResponse
                 int startIdx = html.indexOf("ytInitialPlayerResponse = ");
                 if (startIdx != -1) {
                     startIdx += "ytInitialPlayerResponse = ".length();
                     int endIdx = html.indexOf(";</script>", startIdx);
-                    if (endIdx != -1) {
-                        playerResponse = html.substring(startIdx, endIdx);
-                    }
+                    if (endIdx != -1) playerResponse = html.substring(startIdx, endIdx);
+                }
+                
+                // Pattern 2: var ytInitialPlayerResponse = {...}
+                if (playerResponse.isEmpty()) {
+                   java.util.regex.Pattern p = java.util.regex.Pattern.compile("ytInitialPlayerResponse\\s*=\\s*(\\{.+?\\});");
+                   java.util.regex.Matcher m = p.matcher(html);
+                   if (m.find()) playerResponse = m.group(1);
+                }
+
+                // Try 2: Embed Scrape (often less protected)
+                if (playerResponse.isEmpty()) {
+                   url = new java.net.URL("https://www.youtube.com/embed/" + videoId);
+                   conn = (java.net.HttpURLConnection) url.openConnection();
+                   conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36");
+                   in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
+                   content = new StringBuilder();
+                   while ((inputLine = in.readLine()) != null) {
+                       content.append(inputLine);
+                   }
+                   in.close();
+                   html = content.toString();
+                   
+                   int start = html.indexOf("\"ytInitialPlayerResponse\":");
+                   if (start != -1) {
+                       start += "\"ytInitialPlayerResponse\":".length();
+                       int end = html.indexOf(",\"ytInitialData\"", start);
+                       if (end != -1) playerResponse = html.substring(start, end);
+                   }
                 }
 
                 JSObject ret = new JSObject();
@@ -65,11 +93,11 @@ public class YoutubeExtractorPlugin extends Plugin {
                 ret.put("videoId", videoId);
                 ret.put("playerResponse", playerResponse);
                 ret.put("androidVersion", android.os.Build.VERSION.RELEASE);
+                ret.put("scrapeLength", html.length());
                 
                 call.resolve(ret);
             } catch (Exception e) {
                 Log.e("YoutubeExtractor", "Native scraper failed", e);
-                // Fallback to basic info if scrape fails
                 JSObject ret = new JSObject();
                 ret.put("nativeMode", true);
                 ret.put("error", e.getMessage());

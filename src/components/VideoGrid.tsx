@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import VideoCard from './VideoCard';
 import CategoryBar from './CategoryBar';
+import { logger } from '../lib/logger';
 
 export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelect: (video: any) => void, searchQuery: string }) {
   const [videos, setVideos] = useState<any[]>([]);
@@ -25,16 +26,21 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
         let response;
         try {
           response = await fetch(endpoint);
-        } catch (e) {
-          console.warn("Network error, trying one more time...");
+        } catch (e: any) {
+          logger.add('error', `Network connection failed for ${endpoint}`, { error: e.message });
+          // Second attempt with a short delay
+          await new Promise(r => setTimeout(r, 1000));
           response = await fetch(endpoint);
         }
 
         if (!response.ok) {
+           const errText = await response.text();
+           logger.add('error', `Server error ${response.status} on ${endpoint}`, { response: errText });
            throw new Error(`HTTP ${response.status}`);
         }
         
         const data = await response.json();
+        logger.add('info', `Fetched ${data.items?.length || 0} videos for ${endpoint}`);
         
         if (data.items && data.items.length > 0) {
           setVideos(data.items);
@@ -59,8 +65,8 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
           ]);
           console.warn("No items returned from search/trending, using fallback");
         }
-      } catch (error) {
-        console.error("Failed to fetch videos:", error);
+      } catch (error: any) {
+        logger.add('error', `Critical VideoGrid failure`, { error: error.message });
         // Even on error, show the fallback so the user sees SOMETHING
         setVideos([
           { id: 'kJQP7kiw5Fk', title: 'Connection Error? Try these classics:', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg', channelName: 'System', views: 'Check Connection', uploadedAt: 'Error', duration: '4:42' },
