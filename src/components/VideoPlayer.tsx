@@ -114,8 +114,11 @@ export default function VideoPlayer({ video }: { video: any }) {
       
     } catch (error: any) {
       const errorMessage = error?.message || "Network Error";
-      logger.add('error', "Failed to fetch video info", { videoId: video.id, error: errorMessage });
-      console.error(`Failed to fetch video info: ${errorMessage}`);
+      const isConfigError = errorMessage.includes('Backend API URL is not configured');
+      if (!isConfigError) {
+        logger.add('error', "Failed to fetch video info", { videoId: video.id, error: errorMessage });
+        console.error(`Failed to fetch video info: ${errorMessage}`);
+      }
       setVideoInfo({ error: true, message: errorMessage });
     } finally {
       setLoading(false);
