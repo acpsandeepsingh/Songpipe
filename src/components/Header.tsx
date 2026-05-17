@@ -51,14 +51,16 @@ export default function Header({ onSearch }: { onSearch: (query: string) => void
   }
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-14 bg-red-600 flex items-center justify-between px-3 sm:px-4 z-50 shadow-md pt-safe">
-      <div className="flex items-center gap-1 sm:gap-4 shrink-0">
+    <header className="fixed top-0 left-0 right-0 h-16 bg-[#e62117] flex items-center justify-between px-3 sm:px-4 z-50 shadow-xl pt-safe border-b border-black/10">
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         <button className="p-2 hover:bg-black/10 rounded-full transition-colors lg:hidden">
-          <Menu className="w-6 h-6 text-white" />
+          <Menu className="w-7 h-7 text-white" />
         </button>
-        <div className="flex items-center gap-2 cursor-pointer active:opacity-60 transition-opacity" onClick={() => window.location.reload()}>
-          <Music className="w-6 h-6 text-white fill-white" />
-          <span className="text-white font-black tracking-tighter text-lg md:text-xl uppercase italic">Pipe</span>
+        <div className="flex items-center gap-2 cursor-pointer active:scale-95 transition-transform" onClick={() => window.location.reload()}>
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-inner">
+             <Music className="w-6 h-6 text-[#e62117] fill-[#e62117]" />
+          </div>
+          <span className="text-white font-black tracking-tighter text-xl md:text-2xl uppercase italic drop-shadow-sm">Pipe</span>
         </div>
       </div>
 

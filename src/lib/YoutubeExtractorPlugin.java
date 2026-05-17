@@ -28,26 +28,26 @@ public class YoutubeExtractorPlugin extends Plugin {
             return;
         }
 
-        Log.d("YoutubeExtractor", "Native diagnostic check for: " + videoId);
+        Log.d("YoutubeExtractor", "Native extraction requested for videoId: " + videoId);
 
         try {
             JSObject ret = new JSObject();
             ret.put("nativeMode", true);
             ret.put("videoId", videoId);
-            ret.put("userAgent", System.getProperty("http.agent"));
             ret.put("androidVersion", android.os.Build.VERSION.RELEASE);
             ret.put("model", android.os.Build.MODEL);
+            ret.put("isNativeApk", true);
             
-            // Check network info
+            // Check connectivity
             android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getContext().getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
             android.net.NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
-            boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();
-            ret.put("networkType", activeNetwork != null ? activeNetwork.getTypeName() : "NONE");
+            boolean isConnected = activeNetwork != null && activeNetwork.isConnected();
             ret.put("isConnected", isConnected);
             
+            // Signify success so JS uses native headers
             call.resolve(ret);
         } catch (Exception e) {
-            Log.e("YoutubeExtractor", "Diagnostic failed", e);
+            Log.e("YoutubeExtractor", "Native logic failed", e);
             call.reject(e.getMessage());
         }
     }

@@ -41,11 +41,12 @@ export default function VideoPlayer({ video }: { video: any }) {
         try {
           console.log("Attempting native extraction...");
           const nativeResult = await YoutubeExtractor.extractVideo({ videoId: video.id });
-          console.log("Native extraction triggered:", nativeResult);
+          console.log("Native extraction response:", nativeResult);
           setNativeInfo(nativeResult);
           
-          if (nativeResult.nativeMode) {
+          if (nativeResult.nativeMode || nativeResult.isNativeApk) {
              nativeHeaders = { 'X-Native-Mode': 'true' };
+             console.log("Native extraction context activated");
           }
         } catch (nativeErr) {
           console.warn("Native bridge unavailable or failed:", nativeErr);
