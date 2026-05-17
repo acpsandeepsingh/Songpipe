@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import VideoCard from './VideoCard';
 import CategoryBar from './CategoryBar';
 import { logger } from '../lib/logger';
+import { fetchJsonOrThrow } from '../lib/api';
 
 export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelect: (video: any) => void, searchQuery: string }) {
   const [videos, setVideos] = useState<any[]>([]);
@@ -22,30 +23,14 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
           endpoint = `/api/search?q=${encodeURIComponent(activeCategory + ' songs')}&${queryParams}`;
         }
 
-        let response;
+        let data;
         try {
-          response = await fetch(endpoint);
+          data = await fetchJsonOrThrow(endpoint);
         } catch (e: any) {
-          logger.add('error', `Network connection failed for ${endpoint}`, { error: e.message });
-          // Second attempt with a short delay
+          logger.add('error', `Primary request failed for ${endpoint}`, { error: e.message });
           await new Promise(r => setTimeout(r, 1000));
-          response = await fetch(endpoint);
+          data = await fetchJsonOrThrow(endpoint);
         }
-
-        if (!response.ok) {
-           const errText = await response.text();
-           logger.add('error', `Server error ${response.status} on ${endpoint}`, { response: errText });
-           throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-           const body = await response.text();
-           logger.add('error', `Non-JSON response from ${endpoint}`, { body: body.substring(0, 500) });
-           throw new Error("Server returned an invalid response (not JSON)");
-        }
-        
-        const data = await response.json();
         logger.add('info', `Fetched ${data.items?.length || 0} videos for ${endpoint}`);
         
         if (data.items && data.items.length > 0) {
