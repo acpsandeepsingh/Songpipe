@@ -113,9 +113,28 @@ export default function VideoPlayer({ video }: { video: any }) {
             <button className="flex items-center gap-2 bg-[#272727] px-4 py-2 rounded-full hover:bg-[#3f3f3f] shrink-0">
               <Share2 className="w-5 h-5" /> <span>Share</span>
             </button>
-            <button className="flex items-center gap-2 bg-[#272727] px-4 py-2 rounded-full hover:bg-[#3f3f3f] shrink-0">
-              <Download className="w-5 h-5" /> <span>Download</span>
-            </button>
+            
+            {/* Extraction / Download Menu */}
+            <div className="relative group/menu">
+              <button className="flex items-center gap-2 bg-red-600 px-4 py-2 rounded-full hover:bg-red-700 shrink-0 font-bold">
+                <Download className="w-5 h-5" /> <span>Extract Audio</span>
+              </button>
+              <div className="absolute top-full right-0 mt-2 w-48 bg-[#272727] rounded-xl overflow-hidden shadow-xl hidden group-hover/menu:block z-50 border border-white/10">
+                <div className="p-2 text-xs text-[#aaa] font-bold border-b border-white/5">Available Songs/Audio</div>
+                {videoInfo.formats.audio.slice(0, 3).map((f: any, i: number) => (
+                  <a 
+                    key={i} 
+                    href={f.url} 
+                    download={`${videoInfo.title}.m4a`}
+                    target="_blank"
+                    className="block w-full px-4 py-2 text-sm text-white hover:bg-[#3f3f3f] transition-colors"
+                  >
+                    Download Audio ({f.quality})
+                  </a>
+                ))}
+              </div>
+            </div>
+
             <button className="p-2 bg-[#272727] rounded-full hover:bg-[#3f3f3f] shrink-0">
               <MoreHorizontal className="w-5 h-5" />
             </button>
