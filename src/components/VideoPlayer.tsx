@@ -88,24 +88,24 @@ export default function VideoPlayer({ video }: { video: any }) {
         <div className="w-16 h-16 bg-red-600/10 rounded-full flex items-center justify-center mb-4">
           <Share2 className="w-8 h-8 text-red-500" />
         </div>
-        <p className="text-white font-bold mb-2">Extraction Restricted</p>
+        <p className="text-white font-bold mb-2">Extraction Limited</p>
         <p className="text-sm text-[#aaa] mb-6 max-w-xs px-6">
-          {videoInfo?.isBotError 
-            ? "YouTube detected automated access. Please wait or try another video. This often happens on cloud servers." 
-            : "This video has content restrictions that prevent direct extraction."}
+          {videoInfo?.message?.includes('Sign in') 
+            ? "This video is age-restricted or requires authentication." 
+            : "Direct playback is currently limited for this video on cloud servers. Try the 'Extract' button below or open on YouTube."}
         </p>
         <div className="flex flex-col gap-3 w-full max-w-[200px]">
           <button 
             onClick={fetchInfo}
             className="bg-red-600 text-white px-8 py-2.5 rounded-full font-bold hover:bg-red-700 transition-colors active:scale-95"
           >
-            Retry Extraction
+            Retry Loading
           </button>
           <button 
             onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
-            className="bg-white text-black px-8 py-2.5 rounded-full font-bold hover:bg-white/90 transition-colors"
+            className="bg-white/10 text-white px-8 py-2.5 rounded-full font-bold hover:bg-white/20 transition-colors"
           >
-            Open YouTube
+            Watch on YT
           </button>
         </div>
       </div>
