@@ -80,7 +80,13 @@ export default function VideoPlayer({ video }: { video: any }) {
           logger.add('warn', 'Backend URL missing; native extraction did not return playable formats.', { file: 'src/components/VideoPlayer.tsx', videoId: video.id });
           configErrorLoggedForVideo.current = video.id;
         }
-        throw new Error(apiConfigError);
+        setVideoInfo({
+          error: true,
+          isMetadataOnly: true,
+          message: 'Local mode active. Native extraction failed for this video. Please retry or open directly on YouTube.'
+        });
+        setLoading(false);
+        return;
       }
 
       const infoEndpoint = getFullUrl(`/api/video-info?id=${video.id}`);
