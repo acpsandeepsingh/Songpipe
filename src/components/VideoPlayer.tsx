@@ -43,6 +43,7 @@ export default function VideoPlayer({ video }: { video: any }) {
       
       let nativeHeaders: any = {};
       let nativeData: any = null;
+      let nativeError: any = null;
       // Try Native Extraction if on Android
       if (Capacitor.getPlatform() === 'android') {
         try {
@@ -65,7 +66,15 @@ export default function VideoPlayer({ video }: { video: any }) {
              };
           }
         } catch (nativeErr) {
-          console.warn("Native bridge unavailable or failed:", nativeErr);
+          nativeError = nativeErr;
+          const n: any = nativeErr as any;
+          logger.add('error', 'Native extraction failed', {
+            videoId: video.id,
+            message: n?.message || String(n),
+            code: n?.code,
+            details: n
+          });
+          console.warn("Native extraction failed:", nativeErr);
         }
       }
 
@@ -83,7 +92,9 @@ export default function VideoPlayer({ video }: { video: any }) {
         setVideoInfo({
           error: true,
           isMetadataOnly: true,
-          message: 'Local mode active. Native extraction failed for this video. Please retry or open directly on YouTube.'
+          message: nativeError?.message
+            ? `Local mode: ${nativeError.message}`
+            : 'Local mode active. Native extraction failed for this video. Please retry or open directly on YouTube.'
         });
         setLoading(false);
         return;

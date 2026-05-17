@@ -92,7 +92,12 @@ class SessionLogger {
         }
         return response;
       } catch (err: any) {
-        this.add('error', `Fetch Exception: ${url}`, { error: err.message });
+        const msg = err?.message || '';
+        if (url.includes('firestore.googleapis.com') && msg.includes('aborted')) {
+          this.add('warn', `Fetch Aborted: ${url}`, { error: msg });
+        } else {
+          this.add('error', `Fetch Exception: ${url}`, { error: msg });
+        }
         throw err;
       }
     };
