@@ -7,24 +7,28 @@ export default function VideoPlayer({ video }: { video: any }) {
   const [loading, setLoading] = useState(true);
   const [isExtractionOpen, setIsExtractionOpen] = useState(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
+
+  const fetchInfo = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/video-info?id=${video.id}`);
+      const data = await response.json();
+      setVideoInfo(data);
+    } catch (error) {
+      console.error("Failed to fetch video info:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchInfo() {
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/video-info?id=${video.id}`);
-        const data = await response.json();
-        setVideoInfo(data);
-      } catch (error) {
-        console.error("Failed to fetch video info:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchInfo();
   }, [video.id]);
 
   if (loading) {
+    // ... animation code
     return (
       <div className="flex-1 flex flex-col gap-4 animate-pulse pt-2 sm:pt-0">
         <div className="aspect-video bg-[#272727] sm:rounded-xl" />
@@ -52,17 +56,25 @@ export default function VideoPlayer({ video }: { video: any }) {
           <Share2 className="w-8 h-8 text-red-500" />
         </div>
         <p className="text-white font-bold mb-2">Extraction Restricted</p>
-        <p className="text-sm text-[#aaa] mb-6 max-w-xs">
+        <p className="text-sm text-[#aaa] mb-6 max-w-xs px-6">
           {videoInfo?.isBotError 
-            ? "YouTube detected automated access. Please wait or try another video." 
+            ? "YouTube detected automated access. Please wait or try another video. This often happens on cloud servers." 
             : "This video has content restrictions that prevent direct extraction."}
         </p>
-        <button 
-          onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
-          className="bg-white text-black px-8 py-2.5 rounded-full font-bold hover:bg-white/90 transition-colors"
-        >
-          Watch on YouTube
-        </button>
+        <div className="flex flex-col gap-3 w-full max-w-[200px]">
+          <button 
+            onClick={fetchInfo}
+            className="bg-red-600 text-white px-8 py-2.5 rounded-full font-bold hover:bg-red-700 transition-colors active:scale-95"
+          >
+            Retry Extraction
+          </button>
+          <button 
+            onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
+            className="bg-white text-black px-8 py-2.5 rounded-full font-bold hover:bg-white/90 transition-colors"
+          >
+            Open YouTube
+          </button>
+        </div>
       </div>
     );
   }
@@ -80,6 +92,10 @@ export default function VideoPlayer({ video }: { video: any }) {
             playsInline
             className="w-full h-full"
             poster={video.thumbnail}
+            onError={(e) => {
+               console.error("Video play error:", e);
+               // Handle source errors
+            }}
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-gradient-to-t from-black to-zinc-900">
@@ -101,21 +117,27 @@ export default function VideoPlayer({ video }: { video: any }) {
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src={video.channelAvatar} className="w-10 h-10 rounded-full border border-white/5" alt="" />
+              <img src={video.channelAvatar} className="w-10 h-10 rounded-full border border-white/5 shadow-md" alt="" />
               <div className="flex flex-col">
                 <span className="font-bold text-sm tracking-tight">{videoInfo.author.name}</span>
                 <span className="text-[11px] text-[#aaa] font-medium leading-none">{video.views}</span>
               </div>
             </div>
-            <button className="bg-white text-black px-5 py-2 rounded-full text-sm font-bold hover:bg-white/90 transition-colors active:scale-95">
-              Subscribe
+            <button 
+              onClick={() => setIsSubscribed(!isSubscribed)}
+              className={`px-5 py-2 rounded-full text-sm font-bold transition-all active:scale-95 shadow-lg ${isSubscribed ? 'bg-white/10 text-white' : 'bg-white text-black hover:bg-white/90'}`}
+            >
+              {isSubscribed ? 'Subscribed' : 'Subscribe'}
             </button>
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
             <div className="flex items-center bg-[#272727] rounded-full overflow-hidden shrink-0">
-              <button className="flex items-center gap-2 px-4 py-2 hover:bg-[#3f3f3f] border-r border-white/5 transition-colors active:bg-white/10">
-                <ThumbsUp className="w-5 h-5" /> <span className="font-bold text-sm">{video.views}</span>
+              <button 
+                onClick={() => setIsLiked(!isLiked)}
+                className={`flex items-center gap-2 px-4 py-2 transition-colors active:bg-white/10 border-r border-white/5 ${isLiked ? 'text-red-500' : 'hover:bg-[#3f3f3f]'}`}
+              >
+                <ThumbsUp className={`w-5 h-5 ${isLiked ? 'fill-red-500' : ''}`} /> <span className="font-bold text-sm">{video.views}</span>
               </button>
               <button className="px-4 py-2 hover:bg-[#3f3f3f] transition-colors active:bg-white/10">
                 <ThumbsDown className="w-5 h-5" />
@@ -124,7 +146,7 @@ export default function VideoPlayer({ video }: { video: any }) {
             
             <button 
               onClick={() => setIsExtractionOpen(true)}
-              className="flex items-center gap-2 bg-red-600 px-5 py-2 rounded-full hover:bg-red-700 shrink-0 font-bold text-sm shadow-lg active:scale-95 transition-all text-white"
+              className="flex items-center gap-2 bg-red-600 px-5 py-2 rounded-full hover:bg-red-700 shrink-0 font-bold text-sm shadow-lg active:scale-95 transition-all text-white animate-pulse-slow"
             >
               <Download className="w-5 h-5" /> <span>Extract</span>
             </button>

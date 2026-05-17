@@ -11,10 +11,11 @@ async function startServer() {
   let yt: Innertube;
   try {
     yt = await Innertube.create({
-      generate_session_locals: true,
-      retrieve_player: true
+      generate_session_locally: true,
+      retrieve_player: true,
+      device_category: 'ANDROID' as any
     });
-    console.log("YouTube InnerTube initialized (Android/Web hybrid)");
+    console.log("YouTube InnerTube initialized (Android Mode)");
   } catch (err) {
     console.error("Failed to initialize InnerTube:", err);
   }
@@ -28,21 +29,24 @@ async function startServer() {
       const query = req.query.q as string;
       if (!query) return res.status(400).json({ error: "Query required" });
       
+      console.log(`Searching for: ${query}`);
       const search = await yt.search(query, { type: 'video' });
       
+      if (!search.videos || search.videos.length === 0) {
+        return res.json({ items: [] });
+      }
+
       res.json({
         items: search.videos.map((v: any) => ({
           type: 'video',
           id: v.id,
           title: v.title?.toString(),
-          bestThumbnail: { url: v.thumbnails?.[0]?.url },
-          author: { 
-            name: v.author?.name,
-            bestAvatar: { url: v.author?.thumbnails?.[0]?.url || `https://i.pravatar.cc/150?u=${v.author?.name}` }
-          },
-          views: v.short_view_count?.toString() || v.view_count?.toString(),
-          uploadedAt: v.published?.toString(),
-          duration: v.duration?.toString()
+          thumbnail: v.thumbnails?.[0]?.url,
+          channelName: v.author?.name,
+          channelAvatar: v.author?.thumbnails?.[0]?.url || `https://i.pravatar.cc/150?u=${v.author?.name}`,
+          views: v.short_view_count?.toString() || v.view_count?.toString() || '0 views',
+          uploadedAt: v.published?.toString() || 'Recently',
+          duration: v.duration?.toString() || '0:00'
         }))
       });
     } catch (error) {
@@ -57,31 +61,31 @@ async function startServer() {
       const videoId = req.query.id as string;
       if (!videoId) return res.status(400).json({ error: "Video ID required" });
 
+      console.log(`Extracting: ${videoId}`);
       const info = await yt.getInfo(videoId);
       
-      // Get formats using basic grouping (InnerTube makes this easy)
-      const formats = info.streaming_data?.formats || [];
       const adaptiveFormats = info.streaming_data?.adaptive_formats || [];
+      const regularFormats = info.streaming_data?.formats || [];
 
       res.json({
         title: info.basic_info.title,
-        description: info.basic_info.short_description,
+        description: (info.basic_info as any).short_description || (info.basic_info as any).description,
         thumbnails: info.basic_info.thumbnail,
         author: {
           name: info.basic_info.author,
-          subscriber_count: info.basic_info.view_count 
+          view_count: info.basic_info.view_count 
         },
         viewCount: info.basic_info.view_count,
         publishDate: info.basic_info.is_live ? 'LIVE' : 'Recently',
         formats: {
           audio: adaptiveFormats.filter((f: any) => f.has_audio && !f.has_video).map((f: any) => ({
             url: f.decipher(yt.session.player),
-            quality: f.quality_label || f.audio_quality,
+            quality: f.quality_label || f.audio_quality || 'High',
             container: f.mime_type
           })),
-          video: adaptiveFormats.filter((f: any) => f.has_video).map((f: any) => ({
+          video: [...regularFormats, ...adaptiveFormats.filter((f: any) => f.has_video)].map((f: any) => ({
             url: f.decipher(yt.session.player),
-            qualityLabel: f.quality_label,
+            qualityLabel: f.quality_label || 'High',
             container: f.mime_type
           }))
         }
@@ -91,7 +95,7 @@ async function startServer() {
       res.status(500).json({ 
         error: "Extraction failed", 
         message: error.message,
-        isBotError: error.message.includes('Sign in') || error.message.includes('bot')
+        isBotError: error.message.includes('Sign in') || error.message.includes('bot') || error.message.includes('403')
       });
     }
   });

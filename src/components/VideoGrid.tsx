@@ -12,15 +12,15 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery || 'popular videos')}`);
         const data = await response.json();
-        const formatted = (data.items || []).filter((item: any) => item.type === 'video').map((item: any) => ({
+        const formatted = (data.items || []).map((item: any) => ({
           id: item.id,
           title: item.title,
-          thumbnail: item.bestThumbnail.url,
-          channelName: item.author?.name || 'Unknown',
-          channelAvatar: item.author?.bestAvatar?.url || `https://i.pravatar.cc/150?u=${item.author?.name}`,
-          views: item.views?.toString() || '0',
-          uploadedAt: item.uploadedAt || 'Recently',
-          duration: item.duration || '0:00'
+          thumbnail: item.thumbnail,
+          channelName: item.channelName || 'Unknown',
+          channelAvatar: item.channelAvatar,
+          views: item.views,
+          uploadedAt: item.uploadedAt,
+          duration: item.duration
         }));
         setVideos(formatted);
       } catch (error) {

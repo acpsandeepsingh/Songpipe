@@ -9,22 +9,36 @@ import Sidebar from './components/Sidebar';
 import VideoGrid from './components/VideoGrid';
 import BottomNav from './components/BottomNav';
 import VideoPlayer from './components/VideoPlayer';
+import Library from './components/Library';
 import { ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('home');
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
     setSelectedVideo(null);
+    setActiveTab('home');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleBack = () => {
     setSelectedVideo(null);
     window.scrollTo({ top: 0 });
+  };
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'home':
+        return <VideoGrid onVideoSelect={setSelectedVideo} searchQuery={searchQuery} />;
+      case 'library':
+        return <Library />;
+      default:
+        return <VideoGrid onVideoSelect={setSelectedVideo} searchQuery={searchQuery} />;
+    }
   };
 
   return (
@@ -42,10 +56,10 @@ export default function App() {
             <div className="flex pt-14">
               <Sidebar />
               <main className="flex-1 lg:ml-60 px-0 sm:px-4 pb-14 lg:pb-0">
-                <VideoGrid onVideoSelect={setSelectedVideo} searchQuery={searchQuery} />
+                {renderContent()}
               </main>
             </div>
-            <BottomNav />
+            <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
           </motion.div>
         )}
 
