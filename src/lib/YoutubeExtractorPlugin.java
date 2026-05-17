@@ -1,4 +1,4 @@
-package io.ionic.starter.plugins;
+package org.newpipe.web.plugins;
 
 import android.util.Log;
 import com.getcapacitor.JSObject;

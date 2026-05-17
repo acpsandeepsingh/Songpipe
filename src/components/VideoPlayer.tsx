@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal, ChevronDown, ChevronUp, Cpu } from 'lucide-react';
 import ExtractionDialog from './ExtractionDialog';
 import { db } from '../lib/firebase';
 import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import YoutubeExtractor from '../lib/nativeBridge';
+import { Capacitor } from '@capacitor/core';
 
 export default function VideoPlayer({ video }: { video: any }) {
   const [videoInfo, setVideoInfo] = useState<any>(null);
@@ -30,6 +32,18 @@ export default function VideoPlayer({ video }: { video: any }) {
   const fetchInfo = async () => {
     try {
       setLoading(true);
+      
+      // Try Native Extraction if on Android
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          console.log("Attempting native extraction...");
+          const nativeResult = await YoutubeExtractor.extractVideo({ videoId: video.id });
+          console.log("Native extraction triggered:", nativeResult);
+        } catch (nativeErr) {
+          console.warn("Native bridge unavailable or failed:", nativeErr);
+        }
+      }
+
       const response = await fetch(`/api/video-info?id=${video.id}`);
       const data = await response.json();
       setVideoInfo(data);
@@ -97,9 +111,9 @@ export default function VideoPlayer({ video }: { video: any }) {
         <div className="flex flex-col gap-3 w-full max-w-[200px]">
           <button 
             onClick={fetchInfo}
-            className="bg-red-600 text-white px-8 py-2.5 rounded-full font-bold hover:bg-red-700 transition-colors active:scale-95"
+            className="bg-red-600 text-white px-8 py-2.5 rounded-full font-bold hover:bg-red-700 transition-colors active:scale-95 flex items-center justify-center gap-2"
           >
-            Retry Loading
+            <Cpu className="w-4 h-4" /> Try Native/Retry
           </button>
           <button 
             onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}

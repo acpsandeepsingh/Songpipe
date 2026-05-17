@@ -106,18 +106,20 @@ async function startServer() {
       const url = req.query.url as string;
       if (!url) return res.status(400).send("URL required");
 
-      console.log(`Proxying stream for app: ${url.substring(0, 100)}...`);
+      console.log(`Proxying stream: ${url.substring(0, 100)}...`);
 
       const response = await axios({
         method: 'get',
         url: url,
         responseType: 'stream',
         headers: {
-          'User-Agent': 'com.google.android.youtube/19.11.38 (Linux; U; Android 14; en_US) gzip',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Connection': 'keep-alive',
-          'Range': req.headers.range || 'bytes=0-'
+          'Range': req.headers.range || 'bytes=0-',
+          'Referer': 'https://www.youtube.com/',
+          'Origin': 'https://www.youtube.com'
         },
-        timeout: 10000 // 10s timeout for stream start
+        timeout: 15000 
       });
 
       // Transfer headers
@@ -138,20 +140,16 @@ async function startServer() {
         }
       });
 
+      if (response.status === 206 || req.headers.range) {
+        res.status(206);
+      }
+
       if (!res.getHeader('content-type')) {
         if (url.includes('mime=audio')) res.setHeader('content-type', 'audio/mp4');
         else res.setHeader('content-type', 'video/mp4');
       }
 
-      if (req.headers.range) {
-        res.status(206);
-      }
-      
       response.data.pipe(res);
-      
-      response.data.on('error', (err: any) => {
-        console.error("Stream pipe error:", err.message);
-      });
 
       res.on('close', () => {
         if (response.data.destroy) response.data.destroy();
@@ -193,39 +191,68 @@ async function startServer() {
           streamingData = info.streaming_data || (info as any).playability_status?.streaming_data;
           basicInfo = info.basic_info;
         } catch (e2: any) {
-          console.warn(`Innertube getBasicInfo failed, trying ytdl-core...`);
-          // Method 3: YTDL-Core (Very robust fallback)
-          const ytdlInfo = await ytdl.getInfo(videoId);
-          const bestThumbnail = ytdlInfo.videoDetails.thumbnails.pop();
-          
-          return res.json({
-            id: videoId,
-            title: ytdlInfo.videoDetails.title,
-            description: ytdlInfo.videoDetails.description,
-            thumbnails: bestThumbnail ? [bestThumbnail] : [],
-            author: {
-              name: ytdlInfo.videoDetails.author.name,
-              avatar: ytdlInfo.videoDetails.author.thumbnails?.[0]?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${ytdlInfo.videoDetails.author.name}`
-            },
-            viewCount: ytdlInfo.videoDetails.viewCount,
-            publishDate: ytdlInfo.videoDetails.publishDate || 'Recently',
-            formats: {
-              audio: ytdlInfo.formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
-                url: f.url,
-                proxyUrl: `/api/stream?url=${encodeURIComponent(f.url)}`,
-                quality: f.audioQuality || 'Standard',
-                container: f.mimeType || 'audio/mp4',
-                bitrate: f.bitrate
-              })),
-              video: ytdlInfo.formats.filter(f => f.hasVideo).map(f => ({
-                url: f.url,
-                proxyUrl: `/api/stream?url=${encodeURIComponent(f.url)}`,
-                quality: f.qualityLabel || 'Standard',
-                container: f.mimeType || 'video/mp4',
-                bitrate: f.bitrate
-              }))
-            }
-          });
+          console.warn(`Innertube failed, trying ytdl-core fallback...`);
+          // Method 3: YTDL-Core
+          try {
+             const ytdlInfo = await ytdl.getInfo(videoId, {
+                requestOptions: {
+                   headers: {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                   }
+                }
+             });
+             const bestThumbnail = ytdlInfo.videoDetails.thumbnails.pop();
+             
+             return res.json({
+               id: videoId,
+               title: ytdlInfo.videoDetails.title,
+               description: ytdlInfo.videoDetails.description,
+               thumbnails: bestThumbnail ? [bestThumbnail] : [],
+               author: {
+                 name: ytdlInfo.videoDetails.author.name,
+                 avatar: ytdlInfo.videoDetails.author.thumbnails?.[0]?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${ytdlInfo.videoDetails.author.name}`
+               },
+               viewCount: ytdlInfo.videoDetails.viewCount,
+               publishDate: ytdlInfo.videoDetails.publishDate || 'Recently',
+               formats: {
+                 audio: ytdlInfo.formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
+                   url: f.url,
+                   proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
+                   quality: f.audioQuality || 'Standard',
+                   container: f.mimeType || 'audio/mp4',
+                   bitrate: f.bitrate,
+                   id: f.itag
+                 })),
+                 video: ytdlInfo.formats.filter(f => f.hasVideo).map(f => ({
+                   url: f.url,
+                   proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
+                   quality: f.qualityLabel || 'Standard',
+                   container: f.mimeType || 'video/mp4',
+                   bitrate: f.bitrate,
+                   id: f.itag
+                 }))
+               }
+             });
+          } catch (e3: any) {
+             console.error("YTDL-Core also failed:", e3.message);
+             // Method 4: Scrape search results for basic data if nothing else works
+             try {
+               const searchResults = await yts({ videoId });
+               if (searchResults) {
+                 return res.json({
+                   id: videoId,
+                   title: (searchResults as any).title,
+                   thumbnails: [{ url: (searchResults as any).thumbnail }],
+                   author: { name: (searchResults as any).author?.name },
+                   formats: { audio: [], video: [] },
+                   error: true,
+                   message: "Direct extraction blocked. Using YouTube fallback."
+                 });
+               }
+             } catch (e4) {
+                return res.status(500).json({ error: "All extraction methods failed", message: e3.message });
+             }
+          }
         }
       }
       
