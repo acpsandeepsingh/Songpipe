@@ -5,12 +5,14 @@ import { logger } from '../lib/logger';
 import { getFullUrl, getApiConfigError } from '../lib/api';
 
 export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelect: (video: any) => void, searchQuery: string }) {
+  logger.markFileLoaded('src/components/VideoGrid.tsx', 'component rendered');
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
 
   useEffect(() => {
     async function fetchVideos() {
+      logger.markFunctionCall('src/components/VideoGrid.tsx', 'fetchVideos', { searchQuery, activeCategory });
       setLoading(true);
       try {
         const timestamp = new Date().getTime();

@@ -12,6 +12,13 @@ interface StartupCheck {
   detail?: string;
 }
 
+interface RuntimeCall {
+  timestamp: string;
+  file: string;
+  fn: string;
+  detail?: any;
+}
+
 class SessionLogger {
   private logs: LogEntry[] = [];
   private maxLogs = 100;
@@ -22,6 +29,8 @@ class SessionLogger {
     { name: 'API /api/trending JSON response', status: 'pending' },
     { name: 'Native YoutubeExtractor bridge', status: 'pending' }
   ];
+  private loadedFiles = new Map<string, { loaded: boolean; detail?: string; timestamp: string }>();
+  private runtimeCalls: RuntimeCall[] = [];
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -128,6 +137,8 @@ class SessionLogger {
     return JSON.stringify({
       appState: failed.length > 0 ? 'Startup/Runtime Error' : 'OK',
       checks,
+      loadedFiles: Array.from(this.loadedFiles.entries()).map(([file, info]) => ({ file, ...info })),
+      functionCalls: this.runtimeCalls,
       runtimeErrors: this.logs.filter((l) => l.type === 'error'),
       platform: (window as any).Capacitor?.getPlatform() || 'web',
       browser: navigator.userAgent,
@@ -138,11 +149,14 @@ class SessionLogger {
   private detectStaticAssets() {
     try {
       this.markCheck('index.html loaded', 'ok', window.location.href);
+      this.markFileLoaded('index.html', window.location.href);
       const resources = performance.getEntriesByType('resource').map((r: any) => r.name || '');
       const jsLoaded = resources.some((r: string) => r.includes('/assets/index-') && r.endsWith('.js'));
       const cssLoaded = resources.some((r: string) => r.includes('/assets/index-') && r.endsWith('.css'));
       this.markCheck('main JS bundle loaded', jsLoaded ? 'ok' : 'failed', jsLoaded ? 'found in performance resources' : 'missing from performance resources');
       this.markCheck('main CSS bundle loaded', cssLoaded ? 'ok' : 'failed', cssLoaded ? 'found in performance resources' : 'missing from performance resources');
+      if (jsLoaded) this.markFileLoaded('assets/index-*.js', 'found in performance resources');
+      if (cssLoaded) this.markFileLoaded('assets/index-*.css', 'found in performance resources');
     } catch (e: any) {
       this.markCheck('main JS bundle loaded', 'failed', e?.message || 'resource check failed');
       this.markCheck('main CSS bundle loaded', 'failed', e?.message || 'resource check failed');
@@ -172,6 +186,24 @@ class SessionLogger {
     if (!check) return;
     check.status = status;
     check.detail = detail;
+  }
+
+  public markFileLoaded(file: string, detail?: string) {
+    this.loadedFiles.set(file, {
+      loaded: true,
+      detail,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  public markFunctionCall(file: string, fn: string, detail?: any) {
+    this.runtimeCalls.push({
+      timestamp: new Date().toISOString(),
+      file,
+      fn,
+      detail
+    });
+    if (this.runtimeCalls.length > 200) this.runtimeCalls.shift();
   }
 
   public clear() {

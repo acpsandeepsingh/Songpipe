@@ -10,6 +10,7 @@ import { getFullUrl, getApiConfigError } from '../lib/api';
 import { logger } from '../lib/logger';
 
 export default function VideoPlayer({ video }: { video: any }) {
+  logger.markFileLoaded('src/components/VideoPlayer.tsx', 'component rendered');
   const [videoInfo, setVideoInfo] = useState<any>(null);
   const [nativeInfo, setNativeInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +36,7 @@ export default function VideoPlayer({ video }: { video: any }) {
   }, [video.id]);
 
   const fetchInfo = async () => {
+    logger.markFunctionCall('src/components/VideoPlayer.tsx', 'fetchInfo', { videoId: video.id });
     try {
       setLoading(true);
       

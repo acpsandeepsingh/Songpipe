@@ -13,8 +13,11 @@ import Library from './components/Library';
 import ApiSettings from './components/ApiSettings';
 import { ArrowLeft, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { logger } from './lib/logger';
 
 export default function App() {
+  logger.markFileLoaded('src/App.tsx', 'component initialized');
+  logger.markFunctionCall('src/App.tsx', 'App()', { screen: 'root' });
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home');
@@ -127,4 +130,3 @@ export default function App() {
     </div>
   );
 }
-

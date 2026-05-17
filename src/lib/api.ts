@@ -1,7 +1,10 @@
 
 import { Capacitor } from '@capacitor/core';
+import { logger } from './logger';
 
 export function getApiBaseUrl(): string | null {
+  logger.markFileLoaded('src/lib/api.ts', 'module function invoked');
+  logger.markFunctionCall('src/lib/api.ts', 'getApiBaseUrl');
   const host = window.location.hostname;
   
   // If we're on a real host (browser preview or deployed web app), use current origin
@@ -31,6 +34,7 @@ export function getApiBaseUrl(): string | null {
 }
 
 export function getFullUrl(path: string) {
+  logger.markFunctionCall('src/lib/api.ts', 'getFullUrl', { path });
   const base = getApiBaseUrl();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
@@ -45,6 +49,7 @@ export function getFullUrl(path: string) {
 }
 
 export function getApiConfigError(): string | null {
+  logger.markFunctionCall('src/lib/api.ts', 'getApiConfigError');
   const isNative = Capacitor.isNativePlatform();
   const host = window.location.hostname;
   const savedUrl = localStorage.getItem('VITE_API_URL');
