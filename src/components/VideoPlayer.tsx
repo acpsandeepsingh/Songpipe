@@ -5,7 +5,7 @@ import { db } from '../lib/firebase';
 import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import YoutubeExtractor from '../lib/nativeBridge';
 import { Capacitor } from '@capacitor/core';
-import { getFullUrl } from '../lib/api';
+import { getFullUrl, getApiConfigError } from '../lib/api';
 
 import { logger } from '../lib/logger';
 
@@ -66,7 +66,16 @@ export default function VideoPlayer({ video }: { video: any }) {
         }
       }
 
-      const response = await fetch(getFullUrl(`/api/video-info?id=${video.id}`), {
+      const apiConfigError = getApiConfigError();
+      if (apiConfigError) {
+        logger.add('error', apiConfigError, { file: 'src/components/VideoPlayer.tsx', videoId: video.id });
+        throw new Error(apiConfigError);
+      }
+
+      const infoEndpoint = getFullUrl(`/api/video-info?id=${video.id}`);
+      if (!infoEndpoint) throw new Error('Video info endpoint unavailable. Configure API URL in settings.');
+
+      const response = await fetch(infoEndpoint, {
         headers: nativeHeaders
       });
       

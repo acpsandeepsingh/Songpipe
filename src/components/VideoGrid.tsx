@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import VideoCard from './VideoCard';
 import CategoryBar from './CategoryBar';
 import { logger } from '../lib/logger';
-import { getFullUrl } from '../lib/api';
+import { getFullUrl, getApiConfigError } from '../lib/api';
 
 export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelect: (video: any) => void, searchQuery: string }) {
   const [videos, setVideos] = useState<any[]>([]);
@@ -15,6 +15,12 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
       try {
         const timestamp = new Date().getTime();
         let queryParams = `t=${timestamp}`;
+        const apiConfigError = getApiConfigError();
+        if (apiConfigError) {
+          logger.add('error', apiConfigError, { file: 'src/components/VideoGrid.tsx' });
+          throw new Error(apiConfigError);
+        }
+
         let endpoint = getFullUrl(`/api/trending?${queryParams}`);
         
         if (searchQuery) {
@@ -22,6 +28,8 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
         } else if (activeCategory !== 'All' && activeCategory !== 'Trending' && activeCategory !== "Today's Top") {
           endpoint = getFullUrl(`/api/search?q=${encodeURIComponent(activeCategory + ' songs')}&${queryParams}`);
         }
+
+        if (!endpoint) throw new Error('API endpoint unavailable. Configure API URL in settings.');
 
         let response;
         try {
@@ -55,7 +63,9 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
           // If search yielded nothing, try a generic search instead of just showing empty
           if (searchQuery) {
              console.log("Search empty, trying generic music search...");
-             const fallbackRes = await fetch(getFullUrl(`/api/search?q=popular music ${searchQuery}`));
+             const fallbackEndpoint = getFullUrl(`/api/search?q=popular music ${searchQuery}`);
+             if (!fallbackEndpoint) throw new Error('Fallback API endpoint unavailable');
+             const fallbackRes = await fetch(fallbackEndpoint);
              const fallbackData = await fallbackRes.json();
              if (fallbackData.items?.length > 0) {
                 setVideos(fallbackData.items);
@@ -139,4 +149,3 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
     </div>
   );
 }
-
