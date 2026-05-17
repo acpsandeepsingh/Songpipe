@@ -17,11 +17,20 @@ export default function VideoPlayer({ video }: { video: any }) {
       const data = await response.json();
       setVideoInfo(data);
       
-      // Record to history
-      const history = JSON.parse(localStorage.getItem('history') || '[]');
-      const newEntry = { ...video, watchedAt: new Date().toISOString() };
-      const filtered = history.filter((v: any) => v.id !== video.id);
-      localStorage.setItem('history', JSON.stringify([newEntry, ...filtered].slice(0, 50)));
+      // Record to server-side history
+      try {
+        await fetch('/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(video)
+        });
+      } catch (e) {
+        console.error("Failed to save server history", e);
+        // Fallback to local if server fails
+        const history = JSON.parse(localStorage.getItem('history') || '[]');
+        const filtered = history.filter((v: any) => v.id !== video.id);
+        localStorage.setItem('history', JSON.stringify([{ ...video, watchedAt: new Date().toISOString() }, ...filtered].slice(0, 50)));
+      }
       
     } catch (error) {
       console.error("Failed to fetch video info:", error);

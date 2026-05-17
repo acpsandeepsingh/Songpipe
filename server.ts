@@ -27,6 +27,11 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
+  // In-memory history store for the "Public Test Account"
+  // In a real app, this would be a database.
+  const historyStore: Map<string, any[]> = new Map();
+  const TEST_USER_ID = "test-public-user";
+
   // Helper to ensure yt is ready
   const getYT = async () => {
     if (!yt) await initInnertube();
@@ -38,11 +43,11 @@ async function startServer() {
   app.get("/api/trending", async (req, res) => {
     try {
       console.log("Fetching trending via yt-search...");
-      const results = await yts("trending music today 2024");
+      const results = await yts("trending songs 2024");
       const videos = results.videos || [];
       
       res.json({
-        items: videos.slice(0, 30).map((v: any) => ({
+        items: videos.map((v: any) => ({
           id: v.videoId,
           title: v.title,
           thumbnail: v.thumbnail || v.image,
@@ -55,7 +60,7 @@ async function startServer() {
       });
     } catch (error: any) {
       console.error("Trending fetch failed:", error);
-      res.status(500).json({ error: "Failed to fetch trending", message: error.message });
+      res.json({ items: [] });
     }
   });
 
@@ -70,7 +75,7 @@ async function startServer() {
       const videos = results.videos || [];
 
       res.json({
-        items: videos.slice(0, 30).map((v: any) => ({
+        items: videos.map((v: any) => ({
           type: 'video',
           id: v.videoId,
           title: v.title,
@@ -84,8 +89,37 @@ async function startServer() {
       });
     } catch (error: any) {
       console.error("Search error:", error);
-      res.status(500).json({ error: "Search failed", message: error.message });
+      res.json({ items: [] });
     }
+  });
+
+  // History Endpoints
+  app.get("/api/history", (req, res) => {
+    const history = historyStore.get(TEST_USER_ID) || [];
+    res.json({ items: history });
+  });
+
+  app.post("/api/history", (req, res) => {
+    try {
+      const video = req.body;
+      if (!video || !video.id) return res.status(400).json({ error: "Invalid video" });
+
+      let history = historyStore.get(TEST_USER_ID) || [];
+      // Remove if already exists to move to top
+      history = history.filter((v: any) => v.id !== video.id);
+      history.unshift({ ...video, watchedAt: new Date().toISOString() });
+      
+      // Limit to 50 entries
+      historyStore.set(TEST_USER_ID, history.slice(0, 50));
+      res.json({ success: true, count: historyStore.get(TEST_USER_ID)?.length });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to save history" });
+    }
+  });
+
+  app.delete("/api/history", (req, res) => {
+    historyStore.set(TEST_USER_ID, []);
+    res.json({ success: true });
   });
 
   // Video Info & Extraction Endpoint

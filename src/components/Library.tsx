@@ -7,24 +7,46 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load history
-    const savedHistory = JSON.parse(localStorage.getItem('history') || '[]');
-    setHistory(savedHistory);
+    // Load history from server
+    async function fetchHistory() {
+      try {
+        const res = await fetch('/api/history');
+        const data = await res.json();
+        setHistory(data.items || []);
+      } catch (err) {
+        console.error("Failed to fetch server history", err);
+        // Fallback to local
+        const savedHistory = JSON.parse(localStorage.getItem('history') || '[]');
+        setHistory(savedHistory);
+      }
+    }
 
-    // Fetch Top 50
+    // Fetch Top 50 today
     async function fetchTop() {
       try {
-        const res = await fetch('/api/search?q=top 50 songs today');
+        const res = await fetch('/api/search?q=top billboard songs today 2024');
         const data = await res.json();
-        setTopSongs(data.items?.slice(0, 50) || []);
+        setTopSongs(data.items || []);
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
       }
     }
+    
+    fetchHistory();
     fetchTop();
   }, []);
+
+  const clearHistory = async () => {
+    try {
+      await fetch('/api/history', { method: 'DELETE' });
+      setHistory([]);
+      localStorage.removeItem('history');
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <div className="flex flex-col p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 pb-24">
@@ -37,9 +59,9 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
           { label: 'Likeds', icon: Music2, color: 'text-red-400' },
           { label: 'Playlists', icon: ListMusic, color: 'text-purple-400' },
         ].map((item, i) => (
-          <button key={i} className="flex flex-col items-center justify-center p-4 bg-white/5 rounded-2xl hover:bg-white/10 active:scale-95 transition-all border border-white/5">
+          <button key={i} className="flex flex-col items-center justify-center p-4 bg-white/5 rounded-2xl hover:bg-white/10 active:scale-95 transition-all border border-white/5 shadow-inner">
             <item.icon className={`w-8 h-8 ${item.color} mb-2`} />
-            <span className="text-sm font-medium">{item.label}</span>
+            <span className="text-xs font-bold uppercase tracking-widest">{item.label}</span>
           </button>
         ))}
       </div>
@@ -48,7 +70,7 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg">Watch History</h2>
           {history.length > 0 && (
-            <button onClick={() => { localStorage.removeItem('history'); setHistory([]); }} className="text-red-500 text-sm font-bold active:scale-95 transition-transform">Clear all</button>
+            <button onClick={clearHistory} className="text-red-500 text-sm font-bold active:scale-95 transition-transform">Clear all</button>
           )}
         </div>
         {history.length > 0 ? (
