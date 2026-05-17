@@ -35,7 +35,8 @@ export default function VideoPlayer({ video }: { video: any }) {
     try {
       setLoading(true);
       
-      let nativeHeaders = {};
+      let nativeHeaders: any = {};
+      let nativeData: any = null;
       // Try Native Extraction if on Android
       if (Capacitor.getPlatform() === 'android') {
         try {
@@ -46,7 +47,20 @@ export default function VideoPlayer({ video }: { video: any }) {
           
           if (nativeResult.nativeMode || nativeResult.isNativeApk) {
              nativeHeaders = { 'X-Native-Mode': 'true' };
-             console.log("Native extraction context activated");
+             if (nativeResult.playerResponse) {
+                console.log("Native player response found, using high-priority parse...");
+                const parseRes = await fetch('/api/video-info-native', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ 
+                     videoId: video.id, 
+                     playerResponse: nativeResult.playerResponse 
+                   })
+                });
+                if (parseRes.ok) {
+                   nativeData = await parseRes.json();
+                }
+             }
           }
         } catch (nativeErr) {
           console.warn("Native bridge unavailable or failed:", nativeErr);
@@ -57,14 +71,20 @@ export default function VideoPlayer({ video }: { video: any }) {
         headers: nativeHeaders
       });
       
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}: ${await response.text()}`);
+      const contentType = response.headers.get("content-type");
+      if (contentType && !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Non-JSON response from server (possible IP ban or server error).`);
       }
       
       const data = await response.json();
-      setVideoInfo(data);
-      if (data.error) {
-        setErrorDetails(JSON.stringify(data, null, 2));
+      
+      // If native data is better (has formats when server doesn't), use it
+      const finalData = (nativeData && nativeData.formats?.audio?.length > 0) ? nativeData : data;
+      setVideoInfo(finalData);
+      
+      if (finalData.error && !nativeData) {
+        setErrorDetails(JSON.stringify(finalData, null, 2));
       }
       
       // Record to Firestore public history

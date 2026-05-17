@@ -73,7 +73,9 @@ async function startServer() {
           })) || [];
           
           if (items.length > 0) return res.json({ items });
-        } catch (innerErr) {}
+        } catch (innerErr) {
+          console.error("Innertube trending fallback failed:", innerErr);
+        }
 
         // Even more ultimate fallback: Raw fetch and scrape (Simulated for this demo)
         return res.json({ 
@@ -210,6 +212,59 @@ async function startServer() {
   });
 
   // Video Info & Extraction Endpoint
+  app.post("/api/video-info-native", async (req, res) => {
+    const { videoId, playerResponse } = req.body;
+    try {
+      if (!videoId) return res.status(400).json({ error: "Video ID required" });
+      if (!playerResponse) return res.status(400).json({ error: "Player response required" });
+
+      console.log(`Parsing native response for: ${videoId}`);
+      const client = await getYT();
+      
+      // Parse the player response - Innertube can handle this
+      const info = new (client as any).actions.constructor.Parser.Response(JSON.parse(playerResponse));
+      const streamingData = info.streaming_data;
+      
+      // We still need some basic info that might be missing from just playerResponse
+      // but let's try to build the response
+      
+      const processFormat = (f: any) => {
+        let directUrl = "";
+        try {
+          directUrl = f.decipher ? f.decipher(client.session.player) : (f.url || "");
+        } catch (e) {
+          directUrl = f.url || "";
+        }
+        
+        return {
+          url: directUrl,
+          proxyUrl: directUrl ? `/api/stream?url=${encodeURIComponent(directUrl)}&native=true` : "",
+          quality: f.quality_label || f.audio_quality || f.quality || 'Standard',
+          container: f.mime_type || 'video/mp4',
+          bitrate: f.bitrate,
+          id: f.itag
+        };
+      };
+
+      const adaptiveFormats = streamingData?.adaptive_formats || [];
+      const regularFormats = streamingData?.formats || [];
+      const audioFormats = adaptiveFormats.filter((f: any) => f.has_audio && !f.has_video).map(processFormat);
+      const videoFormats = [...regularFormats, ...adaptiveFormats.filter((f: any) => f.has_video)].map(processFormat);
+
+      res.json({
+        id: videoId,
+        title: "Native Extracted Video",
+        formats: {
+          audio: audioFormats.length > 0 ? audioFormats : regularFormats.map(processFormat),
+          video: videoFormats
+        }
+      });
+    } catch (error: any) {
+      console.error("Native parse failed:", error.message);
+      res.status(500).json({ error: "Parse failed", message: error.message });
+    }
+  });
+
   app.get("/api/video-info", async (req, res) => {
     const videoId = req.query.id as string;
     const isNative = req.headers['x-native-mode'] === 'true';
@@ -365,6 +420,11 @@ async function startServer() {
         videoId: videoId
       });
     }
+  });
+
+  // API 404 handler to prevent HTML responses for API calls
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API route not found', path: req.path });
   });
 
   // Vite middleware for development

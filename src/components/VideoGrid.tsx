@@ -22,23 +22,50 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
           }
         }
 
-        const response = await fetch(endpoint);
+        let response;
+        try {
+          response = await fetch(endpoint);
+        } catch (e) {
+          console.warn("Network error, trying one more time...");
+          response = await fetch(endpoint);
+        }
+
+        if (!response.ok) {
+           throw new Error(`HTTP ${response.status}`);
+        }
+        
         const data = await response.json();
         
         if (data.items && data.items.length > 0) {
           setVideos(data.items);
         } else {
-          // EMERGENCY FALLBACK: If nothing loads, show popular music so UI isn't empty
+          // If search yielded nothing, try a generic search instead of just showing empty
+          if (searchQuery) {
+             console.log("Search empty, trying generic music search...");
+             const fallbackRes = await fetch(`/api/search?q=popular music ${searchQuery}`);
+             const fallbackData = await fallbackRes.json();
+             if (fallbackData.items?.length > 0) {
+                setVideos(fallbackData.items);
+                return;
+             }
+          }
+          
+          // ABSOLUTE EMERGENCY FALLBACK: Hardcoded popular videos
           setVideos([
-            { id: 'dQw4w9WgXcQ', title: 'Rick Astley - Never Gonna Give You Up', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', channelName: 'RickAstleyVEVO', views: '1.5B views', uploadedAt: '14 years ago', duration: '3:33' },
             { id: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito ft. Daddy Yankee', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg', channelName: 'LuisFonsiVEVO', views: '8.4B views', uploadedAt: '7 years ago', duration: '4:42' },
-            { id: 'pAgnJDJN4VA', title: 'Ed Sheeran - Shape of You [Official Video]', thumbnail: 'https://i.ytimg.com/vi/pAgnJDJN4VA/hqdefault.jpg', channelName: 'Ed Sheeran', views: '6.2B views', uploadedAt: '7 years ago', duration: '4:24' }
+            { id: 'pAgnJDJN4VA', title: 'Ed Sheeran - Shape of You [Official Video]', thumbnail: 'https://i.ytimg.com/vi/pAgnJDJN4VA/hqdefault.jpg', channelName: 'Ed Sheeran', views: '6.2B views', uploadedAt: '7 years ago', duration: '4:24' },
+            { id: 'dQw4w9WgXcQ', title: 'Rick Astley - Never Gonna Give You Up', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', channelName: 'RickAstleyVEVO', views: '1.5B views', uploadedAt: '14 years ago', duration: '3:33' },
+            { id: '9bZkp7q19f0', title: 'PSY - GANGNAM STYLE(강남스타일) M/V', thumbnail: 'https://i.ytimg.com/vi/9bZkp7q19f0/hqdefault.jpg', channelName: 'Officialpsy', views: '5B views', uploadedAt: '11 years ago', duration: '4:12' }
           ]);
           console.warn("No items returned from search/trending, using fallback");
         }
       } catch (error) {
         console.error("Failed to fetch videos:", error);
-        setVideos([]);
+        // Even on error, show the fallback so the user sees SOMETHING
+        setVideos([
+          { id: 'kJQP7kiw5Fk', title: 'Connection Error? Try these classics:', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg', channelName: 'System', views: 'Check Connection', uploadedAt: 'Error', duration: '4:42' },
+          { id: 'dQw4w9WgXcQ', title: 'Rick Astley (Fallback)', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', channelName: 'Official', views: '1.5B', uploadedAt: 'Error', duration: '3:33' }
+        ]);
       } finally {
         setLoading(false);
       }
