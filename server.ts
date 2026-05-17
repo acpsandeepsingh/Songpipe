@@ -2,12 +2,19 @@ import express from "express";
 import path from "path";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
-import ytdl from "@distube/ytdl-core";
-import yts from "yt-search";
+import { Innertube } from 'youtubei.js';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+  
+  let yt: Innertube;
+  try {
+    yt = await Innertube.create();
+    console.log("YouTube InnerTube initialized");
+  } catch (err) {
+    console.error("Failed to initialize InnerTube:", err);
+  }
 
   app.use(cors());
   app.use(express.json());
@@ -18,22 +25,21 @@ async function startServer() {
       const query = req.query.q as string;
       if (!query) return res.status(400).json({ error: "Query required" });
       
-      const r = await yts(query);
-      const videos = r.videos.slice(0, 20);
+      const search = await yt.search(query, { type: 'video' });
       
       res.json({
-        items: videos.map(v => ({
+        items: search.videos.map((v: any) => ({
           type: 'video',
-          id: v.videoId,
-          title: v.title,
-          bestThumbnail: { url: v.image },
+          id: v.id,
+          title: v.title?.toString(),
+          bestThumbnail: { url: v.thumbnails?.[0]?.url },
           author: { 
-            name: v.author.name,
-            bestAvatar: { url: `https://i.pravatar.cc/150?u=${v.author.name}` }
+            name: v.author?.name,
+            bestAvatar: { url: v.author?.thumbnails?.[0]?.url || `https://i.pravatar.cc/150?u=${v.author?.name}` }
           },
-          views: v.views,
-          uploadedAt: v.ago,
-          duration: v.timestamp
+          views: v.short_view_count?.toString() || v.view_count?.toString(),
+          uploadedAt: v.published?.toString(),
+          duration: v.duration?.toString()
         }))
       });
     } catch (error) {
@@ -48,29 +54,33 @@ async function startServer() {
       const videoId = req.query.id as string;
       if (!videoId) return res.status(400).json({ error: "Video ID required" });
 
-      const info = await ytdl.getInfo(videoId, {
-        requestOptions: {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          }
-        }
-      });
+      const info = await yt.getInfo(videoId);
       
-      // Filter for audio only formats
-      const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
-      // Filter for video + audio formats
-      const videoFormats = ytdl.filterFormats(info.formats, 'videoandaudio');
+      // Get formats using basic grouping (InnerTube makes this easy)
+      const formats = info.streaming_data?.formats || [];
+      const adaptiveFormats = info.streaming_data?.adaptive_formats || [];
 
       res.json({
-        title: info.videoDetails.title,
-        description: info.videoDetails.description,
-        thumbnails: info.videoDetails.thumbnails,
-        author: info.videoDetails.author,
-        viewCount: info.videoDetails.viewCount,
-        publishDate: info.videoDetails.publishDate,
+        title: info.basic_info.title,
+        description: info.basic_info.short_description,
+        thumbnails: info.basic_info.thumbnail,
+        author: {
+          name: info.basic_info.author,
+          subscriber_count: info.basic_info.view_count 
+        },
+        viewCount: info.basic_info.view_count,
+        publishDate: info.basic_info.is_live ? 'LIVE' : 'Recently',
         formats: {
-          audio: audioFormats.map(f => ({ url: f.url, quality: f.audioQuality, container: f.container })),
-          video: videoFormats.map(f => ({ url: f.url, qualityLabel: f.qualityLabel, container: f.container }))
+          audio: adaptiveFormats.filter((f: any) => f.has_audio && !f.has_video).map((f: any) => ({
+            url: f.decipher(yt.session.player),
+            quality: f.quality_label || f.audio_quality,
+            container: f.mime_type
+          })),
+          video: adaptiveFormats.filter((f: any) => f.has_video).map((f: any) => ({
+            url: f.decipher(yt.session.player),
+            qualityLabel: f.quality_label,
+            container: f.mime_type
+          }))
         }
       });
     } catch (error: any) {
@@ -78,7 +88,7 @@ async function startServer() {
       res.status(500).json({ 
         error: "Extraction failed", 
         message: error.message,
-        isBotError: error.message.includes('confirm you’re not a bot')
+        isBotError: error.message.includes('Sign in') || error.message.includes('bot')
       });
     }
   });
