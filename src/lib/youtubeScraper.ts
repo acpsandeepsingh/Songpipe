@@ -23,13 +23,38 @@ export class YouTubeScraper {
   static async search(query: string) {
     try {
       console.log(`[Scraper] Searching for: ${query}`);
-      const response = await axios.get(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      const response = await axios.get(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D`, {
         headers: this.HEADERS
       });
       return this.parseInitialData(response.data);
     } catch (error) {
       console.error("[Scraper] Search fetch failed:", error);
       return [];
+    }
+  }
+
+  static async getVideoInfo(videoId: string) {
+    try {
+      console.log(`[Scraper] Fetching info for: ${videoId}`);
+      const response = await axios.get(`https://www.youtube.com/watch?v=${videoId}`, {
+        headers: this.HEADERS
+      });
+      const html = response.data;
+      
+      // Extract ytInitialPlayerResponse
+      const playerStart = html.indexOf('var ytInitialPlayerResponse = ');
+      if (playerStart !== -1) {
+        const start = playerStart + 'var ytInitialPlayerResponse = '.length;
+        const end = html.indexOf(';</script>', start);
+        if (end !== -1) {
+          const jsonStr = html.substring(start, end);
+          return JSON.parse(jsonStr);
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error("[Scraper] Info fetch failed:", error);
+      return null;
     }
   }
 
@@ -58,18 +83,41 @@ export class YouTubeScraper {
     const findVideos = (obj: any) => {
       if (!obj || typeof obj !== 'object') return;
       
-      // Support multiple renderer types
-      if (obj.videoRenderer || obj.playlistVideoRenderer || obj.gridVideoRenderer || obj.musicResponsiveListItemRenderer) {
-        const v = obj.videoRenderer || obj.playlistVideoRenderer || obj.gridVideoRenderer || obj.musicResponsiveListItemRenderer;
-        
-        // Handle differences in structure between renderers
-        const videoId = v.videoId || (v.navigationEndpoint?.watchEndpoint?.videoId);
-        const title = v.title?.runs?.[0]?.text || v.title?.simpleText || v.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || "Untitled";
-        const thumbnail = v.thumbnail?.thumbnails?.sort((a: any, b: any) => b.width - a.width)[0]?.url || "";
-        const channelName = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || v.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || "YouTube";
-        const views = v.viewCountText?.simpleText || v.viewCountText?.runs?.[0]?.text || v.flexColumns?.[2]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || "0 views";
-        
-        if (videoId && title) {
+      const renderer = obj.videoRenderer || 
+                       obj.playlistVideoRenderer || 
+                       obj.gridVideoRenderer || 
+                       obj.musicResponsiveListItemRenderer ||
+                       obj.compactVideoRenderer;
+
+      if (renderer) {
+        const v = renderer;
+        const videoId = v.videoId || v.navigationEndpoint?.watchEndpoint?.videoId;
+
+        if (videoId) {
+          let title = "Untitled";
+          if (v.title?.runs?.[0]?.text) title = v.title.runs[0].text;
+          else if (v.title?.simpleText) title = v.title.simpleText;
+          else if (v.flexColumns) {
+            title = v.flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || title;
+          }
+
+          let thumbnail = "";
+          const thumbs = v.thumbnail?.thumbnails || v.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails;
+          if (thumbs && thumbs.length > 0) {
+            thumbnail = thumbs.sort((a: any, b: any) => (b.width || 0) - (a.width || 0))[0]?.url;
+          }
+
+          let channelName = "YouTube Artist";
+          if (v.ownerText?.runs?.[0]?.text) channelName = v.ownerText.runs[0].text;
+          else if (v.shortBylineText?.runs?.[0]?.text) channelName = v.shortBylineText.runs[0].text;
+          else if (v.flexColumns && v.flexColumns.length > 1) {
+            channelName = v.flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || channelName;
+          }
+
+          let views = "0 views";
+          if (v.viewCountText?.simpleText) views = v.viewCountText.simpleText;
+          else if (v.viewCountText?.runs?.[0]?.text) views = v.viewCountText.runs[0].text;
+
           videos.push({
             id: videoId,
             title: title,
@@ -84,7 +132,7 @@ export class YouTubeScraper {
       }
       
       for (const key in obj) {
-        if (obj.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
           findVideos(obj[key]);
         }
       }
@@ -92,12 +140,11 @@ export class YouTubeScraper {
 
     findVideos(data);
     
-    // De-duplicate by ID
     const seen = new Set();
     return videos.filter(v => {
-      const duplicate = seen.has(v.id);
+      if (!v.id || seen.has(v.id)) return false;
       seen.add(v.id);
-      return !duplicate && v.id;
+      return true;
     });
   }
 }
