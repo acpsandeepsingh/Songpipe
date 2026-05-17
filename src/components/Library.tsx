@@ -41,12 +41,12 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
       setLikes(snapshot.docs.map(doc => ({ ...doc.data() })));
     });
 
-    // Fetch Top 50 today
-    async function fetchTop() {
+    async function fetchDiscovery() {
+      // Library should load from database mainly, so we keep discovery optional
       try {
-        const res = await fetch('/api/search?q=top billboard songs today 2024');
+        const res = await fetch('/api/trending');
         const data = await res.json();
-        setTopSongs(data.items || []);
+        setTopSongs(data.items?.slice(0, 5) || []);
       } catch (err) {
         console.error(err);
       } finally {
@@ -54,7 +54,7 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
       }
     }
     
-    fetchTop();
+    fetchDiscovery();
     return () => {
       historyUnsub();
       likesUnsub();
@@ -97,11 +97,13 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
         ))}
       </div>
 
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-lg">Watch History</h2>
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h2 className="font-bold text-lg flex items-center gap-2">
+            <History className="w-5 h-5 text-blue-400" /> Watch History
+          </h2>
           {history.length > 0 && (
-            <button onClick={clearHistory} className="text-red-500 text-sm font-bold active:scale-95 transition-transform">Clear all</button>
+            <button onClick={clearHistory} className="text-red-500 text-[11px] font-black uppercase tracking-wider bg-red-500/10 px-3 py-1 rounded-full active:scale-95 transition-transform border border-red-500/20">Clear History</button>
           )}
         </div>
         {history.length > 0 ? (
@@ -116,9 +118,6 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
                    <img src={video.thumbnail} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
                    <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
                    <div className="absolute bottom-1.5 right-1.5 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-black backdrop-blur-sm border border-white/10">{video.duration}</div>
-                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <PlayCircle className="w-10 h-10 text-white fill-red-600/20" />
-                   </div>
                 </div>
                 <h4 className="text-sm font-bold line-clamp-1 tracking-tight pr-2">{video.title}</h4>
                 <p className="text-[11px] text-[#aaa] font-medium">{video.channelName}</p>
@@ -127,15 +126,19 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
           </div>
         ) : (
           <div className="p-12 bg-white/5 rounded-3xl border border-dashed border-white/10 flex flex-col items-center justify-center text-center gap-3">
-             <History className="w-10 h-10 text-white/20" />
-             <p className="text-sm text-[#888] font-medium max-w-[200px]">Songs you watch will appear here for quick access</p>
+             <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+               <History className="w-6 h-6 text-white/20" />
+             </div>
+             <p className="text-sm text-[#888] font-medium max-w-[200px]">Your watch history is empty. Start listening to see your library grow.</p>
           </div>
         )}
       </section>
 
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-lg">Liked Songs</h2>
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h2 className="font-bold text-lg flex items-center gap-2">
+            <Music2 className="w-5 h-5 text-red-500" /> Liked Songs
+          </h2>
         </div>
         {likes.length > 0 ? (
           <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
@@ -148,7 +151,7 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
                 <div className="aspect-video bg-[#272727] rounded-xl flex items-center justify-center relative shadow-xl overflow-hidden border border-white/5">
                    <img src={video.thumbnail} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
                    <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors flex items-center justify-center">
-                       <Music2 className="w-8 h-8 text-white/20" />
+                       <Music2 className="w-8 h-8 text-white/10" />
                    </div>
                    <div className="absolute bottom-1.5 right-1.5 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-black backdrop-blur-sm border border-white/10">{video.duration}</div>
                 </div>
@@ -159,30 +162,30 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
           </div>
         ) : (
           <div className="p-12 bg-white/5 rounded-3xl border border-dashed border-white/10 flex flex-col items-center justify-center text-center gap-3">
-             <Music2 className="w-10 h-10 text-white/20" />
-             <p className="text-sm text-[#888] font-medium max-w-[200px]">Songs you like will appear here</p>
+             <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+                <Music2 className="w-6 h-6 text-white/20" />
+             </div>
+             <p className="text-sm text-[#888] font-medium max-w-[200px]">Songs you like will appear here for easy access.</p>
           </div>
         )}
       </section>
 
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-lg">Weekly Top 50</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-red-500 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">TRENDING</span>
+      {topSongs.length > 0 && (
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h2 className="font-bold text-lg flex items-center gap-2">
+              <PlayCircle className="w-5 h-5 text-gray-400" /> Discovery
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-[#555] bg-white/5 px-2 py-0.5 rounded border border-white/10 uppercase tracking-widest leading-none">Global</span>
+            </div>
           </div>
-        </div>
-        <div className="grid grid-cols-1 gap-2">
-          {loading ? (
-            [1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="h-20 bg-white/5 rounded-2xl animate-pulse border border-white/5" />
-            ))
-          ) : (
-            topSongs.map((song, i) => (
+          <div className="grid grid-cols-1 gap-2">
+            {topSongs.map((song, i) => (
               <button 
                 key={`${song.id}-${i}`} 
                 onClick={() => onVideoSelect(song)}
-                className="flex items-center gap-4 w-full p-2.5 hover:bg-white/5 rounded-2xl transition-all text-left group active:bg-white/10"
+                className="flex items-center gap-4 w-full p-2.5 hover:bg-white/5 rounded-2xl transition-all text-left group active:bg-white/10 border border-transparent hover:border-white/5"
               >
                 <div className="relative w-16 h-16 bg-[#272727] rounded-xl overflow-hidden shrink-0 shadow-lg group-hover:shadow-red-600/10 transition-shadow">
                    <img src={song.thumbnail} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
@@ -199,14 +202,14 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
                       <span className="text-[11px] text-[#aaa] font-medium">{song.views}</span>
                    </div>
                 </div>
-                <div className="text-xs font-black text-[#555] group-hover:text-red-500 transition-colors font-mono">
+                <div className="text-xs font-black text-white/20 group-hover:text-red-500 transition-colors font-mono">
                    {song.duration}
                 </div>
               </button>
-            ))
-          )}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

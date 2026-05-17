@@ -21,10 +21,8 @@ service cloud.firestore {
     // Public History (Public Test Account)
     match /public_history/{docId} {
       allow read: if true;
-      allow create: if isValidHistory(request.resource.data) && isValidId(docId);
-      allow update: if isValidHistory(request.resource.data) && 
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['watchedAt']);
-      allow delete: if false; // Prevention of wiping the public history easily
+      allow create, update: if isValidHistory(request.resource.data) && isValidId(docId);
+      allow delete: if true; 
     }
 
     // Public Likes
