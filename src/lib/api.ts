@@ -1,7 +1,13 @@
 import { Capacitor } from '@capacitor/core';
 
+const rawAndroidBases = (import.meta.env.VITE_ANDROID_API_BASES || '')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
+
 const DEFAULT_ANDROID_BASES = [
   (import.meta.env.VITE_ANDROID_API_BASE_URL || '').trim(),
+  ...rawAndroidBases,
   'http://10.0.2.2:3000',
   'http://localhost:3000',
   'http://127.0.0.1:3000'
@@ -9,6 +15,7 @@ const DEFAULT_ANDROID_BASES = [
 
 const explicitBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
 let resolvedBase: string | null = explicitBase || null;
+let hasLoggedAndroidHint = false;
 
 function normalize(path: string) {
   return path.startsWith('/') ? path : `/${path}`;
@@ -65,6 +72,15 @@ export async function fetchJsonOrThrow(path: string, init?: RequestInit) {
     } catch (error: any) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
+  }
+
+  if (Capacitor.getPlatform() === 'android' && !hasLoggedAndroidHint) {
+    hasLoggedAndroidHint = true;
+    console.warn(
+      `[API] Android request failed for all candidates: ${urls.join(', ')}. ` +
+      `If this is a physical device, localhost/10.0.2.2 won't reach your computer. ` +
+      `Set VITE_API_BASE_URL or VITE_ANDROID_API_BASES to a reachable LAN/HTTPS backend.`
+    );
   }
 
   throw lastError || new Error(`Failed to fetch ${path}`);
