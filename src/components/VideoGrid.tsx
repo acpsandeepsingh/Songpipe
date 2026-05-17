@@ -3,6 +3,8 @@ import VideoCard from './VideoCard';
 import CategoryBar from './CategoryBar';
 import { logger } from '../lib/logger';
 import { getFullUrl, getApiConfigError } from '../lib/api';
+import YoutubeExtractor from '../lib/nativeBridge';
+import { Capacitor } from '@capacitor/core';
 
 export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelect: (video: any) => void, searchQuery: string }) {
   logger.markFileLoaded('src/components/VideoGrid.tsx', 'component rendered');
@@ -27,6 +29,19 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
         const apiConfigError = getApiConfigError();
         if (apiConfigError) {
           logger.add('warn', `Running in local extraction mode (no backend URL).`, { file: 'src/components/VideoGrid.tsx' });
+          if (Capacitor.getPlatform() === 'android') {
+            try {
+              const nativeResult = searchQuery
+                ? await YoutubeExtractor.search({ query: searchQuery })
+                : await YoutubeExtractor.trending();
+              if (nativeResult?.items?.length > 0) {
+                setVideos(nativeResult.items);
+                return;
+              }
+            } catch (e: any) {
+              logger.add('warn', 'Native search/trending failed, using local catalog.', { error: e?.message });
+            }
+          }
           const filtered = searchQuery
             ? localCatalog.filter(v => `${v.title} ${v.channelName}`.toLowerCase().includes(searchQuery.toLowerCase()))
             : localCatalog;
