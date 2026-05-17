@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "HistoryEntry": {
+      "title": "History Entry",
+      "description": "A video watched by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "channelName": { "type": "string" },
+        "duration": { "type": "string" },
+        "watchedAt": { "type": "string", "format": "date-time" },
+        "views": { "type": "string" }
+      },
+      "required": ["id", "title", "watchedAt"]
+    },
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "A saved video or playlist",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "savedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "savedAt"]
+    }
+  },
+  "firestore": {
+    "/public_history": {
+      "schema": "HistoryEntry",
+      "description": "Shared history for the public test account"
+    },
+    "/public_likes": {
+      "schema": "HistoryEntry",
+      "description": "Shared liked songs for the public test account"
+    }
+  }
+}

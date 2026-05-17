@@ -27,11 +27,6 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  // In-memory history store for the "Public Test Account"
-  // In a real app, this would be a database.
-  const historyStore: Map<string, any[]> = new Map();
-  const TEST_USER_ID = "test-public-user";
-
   // Helper to ensure yt is ready
   const getYT = async () => {
     if (!yt) await initInnertube();
@@ -42,10 +37,29 @@ async function startServer() {
   // Trending Music Endpoint
   app.get("/api/trending", async (req, res) => {
     try {
-      console.log("Fetching trending via yt-search...");
+      console.log("Fetching trending results...");
+      // Try yt-search first
       const results = await yts("trending songs 2024");
       const videos = results.videos || [];
       
+      if (videos.length === 0) {
+        console.log("yt-search returned no trending videos, trying Innertube search...");
+        const client = await getYT();
+        const search = await client.search("trending music", { type: 'video' });
+        return res.json({
+          items: (search.videos || []).map((v: any) => ({
+            id: v.id,
+            title: v.title?.toString(),
+            thumbnail: v.thumbnails?.[0]?.url || v.thumbnail?.[0]?.url,
+            channelName: v.author?.name || 'Unknown',
+            channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.author?.name}`,
+            views: v.short_view_count?.toString() || v.view_count?.toString() || '0 views',
+            uploadedAt: v.published?.toString() || 'Trending',
+            duration: v.duration?.toString() || '0:00'
+          }))
+        });
+      }
+
       res.json({
         items: videos.map((v: any) => ({
           id: v.videoId,
@@ -70,9 +84,28 @@ async function startServer() {
       const query = req.query.q as string;
       if (!query) return res.status(400).json({ error: "Query required" });
       
-      console.log(`Searching via yt-search for: ${query}`);
+      console.log(`Searching for: ${query}`);
       const results = await yts(query);
       const videos = results.videos || [];
+
+      if (videos.length === 0) {
+        console.log(`yt-search returned no results for "${query}", trying Innertube...`);
+        const client = await getYT();
+        const search = await client.search(query, { type: 'video' });
+        return res.json({
+          items: (search.videos || []).map((v: any) => ({
+            type: 'video',
+            id: v.id,
+            title: v.title?.toString(),
+            thumbnail: v.thumbnails?.[0]?.url || v.thumbnail?.[0]?.url,
+            channelName: v.author?.name || 'Unknown',
+            channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.author?.name}`,
+            views: v.short_view_count?.toString() || v.view_count?.toString() || '0 views',
+            uploadedAt: v.published?.toString() || 'Recently',
+            duration: v.duration?.toString() || '0:00'
+          }))
+        });
+      }
 
       res.json({
         items: videos.map((v: any) => ({
@@ -91,35 +124,6 @@ async function startServer() {
       console.error("Search error:", error);
       res.json({ items: [] });
     }
-  });
-
-  // History Endpoints
-  app.get("/api/history", (req, res) => {
-    const history = historyStore.get(TEST_USER_ID) || [];
-    res.json({ items: history });
-  });
-
-  app.post("/api/history", (req, res) => {
-    try {
-      const video = req.body;
-      if (!video || !video.id) return res.status(400).json({ error: "Invalid video" });
-
-      let history = historyStore.get(TEST_USER_ID) || [];
-      // Remove if already exists to move to top
-      history = history.filter((v: any) => v.id !== video.id);
-      history.unshift({ ...video, watchedAt: new Date().toISOString() });
-      
-      // Limit to 50 entries
-      historyStore.set(TEST_USER_ID, history.slice(0, 50));
-      res.json({ success: true, count: historyStore.get(TEST_USER_ID)?.length });
-    } catch (err) {
-      res.status(500).json({ error: "Failed to save history" });
-    }
-  });
-
-  app.delete("/api/history", (req, res) => {
-    historyStore.set(TEST_USER_ID, []);
-    res.json({ success: true });
   });
 
   // Video Info & Extraction Endpoint

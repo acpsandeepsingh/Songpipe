@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 import ExtractionDialog from './ExtractionDialog';
+import { db } from '../lib/firebase';
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 
 export default function VideoPlayer({ video }: { video: any }) {
   const [videoInfo, setVideoInfo] = useState<any>(null);
@@ -10,6 +12,21 @@ export default function VideoPlayer({ video }: { video: any }) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
 
+  useEffect(() => {
+    async function checkLiked() {
+      try {
+        const likedDoc = doc(db, 'public_likes', video.id);
+        const snapshot = await getDoc(likedDoc);
+        if (snapshot.exists()) {
+          setIsLiked(true);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    checkLiked();
+  }, [video.id]);
+
   const fetchInfo = async () => {
     try {
       setLoading(true);
@@ -17,16 +34,16 @@ export default function VideoPlayer({ video }: { video: any }) {
       const data = await response.json();
       setVideoInfo(data);
       
-      // Record to server-side history
+      // Record to Firestore public history
       try {
-        await fetch('/api/history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(video)
-        });
+        const historyDoc = doc(db, 'public_history', video.id);
+        await setDoc(historyDoc, {
+          ...video,
+          watchedAt: new Date().toISOString()
+        }, { merge: true });
       } catch (e) {
-        console.error("Failed to save server history", e);
-        // Fallback to local if server fails
+        console.error("Failed to save Firestore history", e);
+        // Fallback to local if server/firestore fails
         const history = JSON.parse(localStorage.getItem('history') || '[]');
         const filtered = history.filter((v: any) => v.id !== video.id);
         localStorage.setItem('history', JSON.stringify([{ ...video, watchedAt: new Date().toISOString() }, ...filtered].slice(0, 50)));
@@ -139,12 +156,32 @@ export default function VideoPlayer({ video }: { video: any }) {
                 <span className="text-[11px] text-[#aaa] font-medium leading-none">{video.views}</span>
               </div>
             </div>
-            <button 
-              onClick={() => setIsSubscribed(!isSubscribed)}
-              className={`px-5 py-2 rounded-full text-sm font-bold transition-all active:scale-95 shadow-lg ${isSubscribed ? 'bg-white/10 text-white' : 'bg-white text-black hover:bg-white/90'}`}
-            >
-              {isSubscribed ? 'Subscribed' : 'Subscribe'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={async () => {
+                   try {
+                     const likedDoc = doc(db, 'public_likes', video.id);
+                     if (isLiked) {
+                        await deleteDoc(likedDoc);
+                     } else {
+                        await setDoc(likedDoc, { ...video, watchedAt: new Date().toISOString() });
+                     }
+                     setIsLiked(!isLiked);
+                   } catch (e) {
+                     console.error("Like error:", e);
+                   }
+                }}
+                className={`p-2.5 rounded-full transition-all active:scale-95 shadow-md ${isLiked ? 'bg-red-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}
+              >
+                <ThumbsUp className={`w-5 h-5 ${isLiked ? 'fill-white' : ''}`} />
+              </button>
+              <button 
+                onClick={() => setIsSubscribed(!isSubscribed)}
+                className={`px-5 py-2 rounded-full text-sm font-bold transition-all active:scale-95 shadow-lg ${isSubscribed ? 'bg-white/10 text-white' : 'bg-white text-black hover:bg-white/90'}`}
+              >
+                {isSubscribed ? 'Subscribed' : 'Subscribe'}
+              </button>
+            </div>
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">

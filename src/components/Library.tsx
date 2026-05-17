@@ -1,25 +1,45 @@
 import { useEffect, useState } from 'react';
 import { History, Bookmark, Music2, ListMusic, PlayCircle } from 'lucide-react';
+import { db } from '../lib/firebase';
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  limit, 
+  onSnapshot, 
+  deleteDoc, 
+  getDocs, 
+  doc, 
+  writeBatch 
+} from 'firebase/firestore';
 
 export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => void }) {
   const [history, setHistory] = useState<any[]>([]);
+  const [likes, setLikes] = useState<any[]>([]);
   const [topSongs, setTopSongs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load history from server
-    async function fetchHistory() {
-      try {
-        const res = await fetch('/api/history');
-        const data = await res.json();
-        setHistory(data.items || []);
-      } catch (err) {
-        console.error("Failed to fetch server history", err);
-        // Fallback to local
-        const savedHistory = JSON.parse(localStorage.getItem('history') || '[]');
-        setHistory(savedHistory);
-      }
-    }
+    // Real-time synchronization with Firestore for history
+    const historyQ = query(
+      collection(db, 'public_history'),
+      orderBy('watchedAt', 'desc'),
+      limit(50)
+    );
+
+    const historyUnsub = onSnapshot(historyQ, (snapshot) => {
+      setHistory(snapshot.docs.map(doc => ({ ...doc.data() })));
+    });
+
+    // Real-time synchronization for likes
+    const likesQ = query(
+      collection(db, 'public_likes'),
+      limit(50)
+    );
+
+    const likesUnsub = onSnapshot(likesQ, (snapshot) => {
+      setLikes(snapshot.docs.map(doc => ({ ...doc.data() })));
+    });
 
     // Fetch Top 50 today
     async function fetchTop() {
@@ -34,17 +54,28 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
       }
     }
     
-    fetchHistory();
     fetchTop();
+    return () => {
+      historyUnsub();
+      likesUnsub();
+    };
   }, []);
 
   const clearHistory = async () => {
     try {
-      await fetch('/api/history', { method: 'DELETE' });
+      // For public history, clearing might be restricted or we do a batch delete
+      const q = query(collection(db, 'public_history'));
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((d) => {
+        batch.delete(d.ref);
+      });
+      await batch.commit();
+      
       setHistory([]);
       localStorage.removeItem('history');
     } catch (err) {
-      console.error(err);
+      console.error("Error clearing history:", err);
     }
   };
 
@@ -98,6 +129,38 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
           <div className="p-12 bg-white/5 rounded-3xl border border-dashed border-white/10 flex flex-col items-center justify-center text-center gap-3">
              <History className="w-10 h-10 text-white/20" />
              <p className="text-sm text-[#888] font-medium max-w-[200px]">Songs you watch will appear here for quick access</p>
+          </div>
+        )}
+      </section>
+
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-bold text-lg">Liked Songs</h2>
+        </div>
+        {likes.length > 0 ? (
+          <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+            {likes.map((video, i) => (
+              <div 
+                key={`${video.id}-${i}`} 
+                className="flex flex-col gap-2 min-w-[160px] shrink-0 active:scale-95 transition-transform cursor-pointer group"
+                onClick={() => onVideoSelect(video)}
+              >
+                <div className="aspect-video bg-[#272727] rounded-xl flex items-center justify-center relative shadow-xl overflow-hidden border border-white/5">
+                   <img src={video.thumbnail} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
+                   <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors flex items-center justify-center">
+                       <Music2 className="w-8 h-8 text-white/20" />
+                   </div>
+                   <div className="absolute bottom-1.5 right-1.5 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-black backdrop-blur-sm border border-white/10">{video.duration}</div>
+                </div>
+                <h4 className="text-sm font-bold line-clamp-1 tracking-tight pr-2">{video.title}</h4>
+                <p className="text-[11px] text-[#aaa] font-medium">{video.channelName}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-12 bg-white/5 rounded-3xl border border-dashed border-white/10 flex flex-col items-center justify-center text-center gap-3">
+             <Music2 className="w-10 h-10 text-white/20" />
+             <p className="text-sm text-[#888] font-medium max-w-[200px]">Songs you like will appear here</p>
           </div>
         )}
       </section>
