@@ -141,11 +141,11 @@ public class YoutubeExtractorPlugin extends Plugin {
 
         Single.fromCallable(() -> {
             StreamingService service = NewPipe.getServiceByUrl("https://www.youtube.com");
-            return SearchInfo.getInfo(service, query);
+            return SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery(query));
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
-        .subscribe(info -> {
+        .subscribe((SearchInfo info) -> {
             JSArray items = new JSArray();
             for (InfoItem raw : info.getRelatedItems()) {
                 if (raw instanceof StreamInfoItem) {
