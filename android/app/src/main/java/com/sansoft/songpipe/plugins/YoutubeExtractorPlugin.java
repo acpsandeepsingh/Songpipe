@@ -22,6 +22,11 @@ import com.sansoft.songpipe.extractor.DownloaderImpl;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.schedulers.Schedulers;
@@ -29,6 +34,7 @@ import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 
 @CapacitorPlugin(name = "YoutubeExtractor")
 public class YoutubeExtractorPlugin extends Plugin {
+    private static final OkHttpClient FALLBACK_HTTP = new OkHttpClient();
     private static String firstImageUrl(List<Image> images) {
         if (images == null || images.isEmpty()) return "";
         Image img = images.get(0);
@@ -74,48 +80,96 @@ public class YoutubeExtractorPlugin extends Plugin {
                     }
                 }
             }
+            // Backup fallback: lightweight watch-page player JSON parse when NewPipe fails.
+            JSObject backup = tryFallbackExtract(videoId);
+            if (backup != null) return backup;
             throw last != null ? last : new Exception("Native extraction failed");
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
         .subscribe(info -> {
-            JSObject result = new JSObject();
-            result.put("id", info.getId());
-            result.put("title", info.getName());
-            result.put("thumbnail", firstImageUrl(info.getThumbnails()));
-            result.put("author", info.getUploaderName());
-            result.put("views", info.getViewCount());
-            result.put("description", info.getDescription());
-
-            JSObject formats = new JSObject();
-            
-            JSArray videoStreams = new JSArray();
-            for (VideoStream stream : info.getVideoStreams()) {
-                JSObject s = new JSObject();
-                s.put("url", stream.getUrl());
-                s.put("quality", stream.getResolution());
-                s.put("mimeType", stream.getFormat().getName());
-                videoStreams.put(s);
+            if (info instanceof JSObject) {
+                call.resolve((JSObject) info);
+                return;
             }
-            formats.put("video", videoStreams);
-
-            JSArray audioStreams = new JSArray();
-            for (AudioStream stream : info.getAudioStreams()) {
-                JSObject s = new JSObject();
-                s.put("url", stream.getUrl());
-                s.put("bitrate", stream.getAverageBitrate());
-                s.put("mimeType", stream.getFormat().getName());
-                audioStreams.put(s);
-            }
-            formats.put("audio", audioStreams);
-            
-            result.put("formats", formats);
-            result.put("nativeMode", true);
-
-            call.resolve(result);
+            call.resolve(toJsFromStreamInfo((StreamInfo) info));
         }, throwable -> {
             call.reject("Extraction failed: " + throwable.getMessage());
         });
+    }
+
+    private JSObject toJsFromStreamInfo(StreamInfo info) {
+        JSObject result = new JSObject();
+        result.put("id", info.getId());
+        result.put("title", info.getName());
+        result.put("thumbnail", firstImageUrl(info.getThumbnails()));
+        result.put("author", info.getUploaderName());
+        result.put("views", info.getViewCount());
+        result.put("description", info.getDescription());
+
+        JSObject formats = new JSObject();
+        JSArray videoStreams = new JSArray();
+        for (VideoStream stream : info.getVideoStreams()) {
+            JSObject s = new JSObject();
+            s.put("url", stream.getUrl());
+            s.put("quality", stream.getResolution());
+            s.put("mimeType", stream.getFormat().getName());
+            videoStreams.put(s);
+        }
+        formats.put("video", videoStreams);
+
+        JSArray audioStreams = new JSArray();
+        for (AudioStream stream : info.getAudioStreams()) {
+            JSObject s = new JSObject();
+            s.put("url", stream.getUrl());
+            s.put("bitrate", stream.getAverageBitrate());
+            s.put("mimeType", stream.getFormat().getName());
+            audioStreams.put(s);
+        }
+        formats.put("audio", audioStreams);
+
+        result.put("formats", formats);
+        result.put("nativeMode", true);
+        result.put("extractor", "newpipe");
+        return result;
+    }
+
+    private JSObject tryFallbackExtract(String videoId) {
+        try {
+            Request req = new Request.Builder()
+                .url("https://m.youtube.com/watch?v=" + videoId)
+                .header("User-Agent", DownloaderImpl.USER_AGENT)
+                .build();
+            try (Response res = FALLBACK_HTTP.newCall(req).execute()) {
+                if (!res.isSuccessful() || res.body() == null) return null;
+                String html = res.body().string();
+                Matcher m = Pattern.compile("\"url\":\"(https:[^\"]+mime=audio[^\"]+)\"").matcher(html);
+                if (!m.find()) return null;
+                String audioUrl = m.group(1).replace("\\u0026", "&").replace("\\/", "/");
+                JSObject result = new JSObject();
+                result.put("id", videoId);
+                result.put("title", "YouTube Audio (Fallback)");
+                result.put("thumbnail", "https://i.ytimg.com/vi/" + videoId + "/hqdefault.jpg");
+                result.put("author", "YouTube");
+                result.put("views", 0);
+                result.put("description", "Fallback extractor path");
+                JSObject formats = new JSObject();
+                JSArray audio = new JSArray();
+                JSObject a = new JSObject();
+                a.put("url", audioUrl);
+                a.put("bitrate", 128000);
+                a.put("mimeType", "audio/mp4");
+                audio.put(a);
+                formats.put("audio", audio);
+                formats.put("video", new JSArray());
+                result.put("formats", formats);
+                result.put("nativeMode", true);
+                result.put("extractor", "fallback_html");
+                return result;
+            }
+        } catch (Exception ignore) {
+            return null;
+        }
     }
 
     @PluginMethod
