@@ -113,8 +113,10 @@ export default function VideoPlayer({ video }: { video: any }) {
       }
       
     } catch (error: any) {
-      console.error("Failed to fetch video info:", error);
-      setVideoInfo({ error: true, message: error.message || "Network Error" });
+      const errorMessage = error?.message || "Network Error";
+      logger.add('error', "Failed to fetch video info", { videoId: video.id, error: errorMessage });
+      console.error(`Failed to fetch video info: ${errorMessage}`);
+      setVideoInfo({ error: true, message: errorMessage });
     } finally {
       setLoading(false);
     }

@@ -85,7 +85,9 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
           console.warn("No items returned from search/trending, using fallback");
         }
       } catch (error: any) {
-        logger.add('error', `Critical VideoGrid failure`, { error: error.message });
+        if (!error?.message?.includes('Backend API URL is not configured')) {
+          logger.add('error', `Critical VideoGrid failure`, { error: error.message });
+        }
         // Even on error, show the fallback so the user sees SOMETHING
         setVideos([
           { id: 'kJQP7kiw5Fk', title: 'Connection Error? Try these classics:', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg', channelName: 'System', views: 'Check Connection', uploadedAt: 'Error', duration: '4:42' },
