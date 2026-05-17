@@ -1,16 +1,22 @@
 const categories = [
-  "All", "Music", "Gaming", "Live", "Mixes", "Coding", "React", "TypeScript", 
-  "Podcasts", "Design", "Nature", "News", "Sports", "Learning"
+  "All", "Music", "Trending", "Today's Top", "Pop", "Gaming", "Live", "Mixes", "Chill", "New"
 ];
 
-export default function CategoryBar() {
+export default function CategoryBar({ 
+  activeCategory, 
+  onCategorySelect 
+}: { 
+  activeCategory: string, 
+  onCategorySelect: (cat: string) => void 
+}) {
   return (
-    <div className="sticky top-14 bg-[#0f0f0f] z-40 py-3 px-4 flex gap-3 overflow-x-auto custom-scrollbar no-scrollbar whitespace-nowrap">
-      {categories.map((cat, i) => (
+    <div className="sticky top-14 bg-[#0f0f0f] z-40 py-3 px-4 flex gap-3 overflow-x-auto no-scrollbar whitespace-nowrap">
+      {categories.map((cat) => (
         <button 
           key={cat}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            i === 0 ? 'bg-white text-black' : 'bg-[#272727] text-white hover:bg-[#3f3f3f]'
+          onClick={() => onCategorySelect(cat)}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all active:scale-95 ${
+            activeCategory === cat ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
           }`}
         >
           {cat}

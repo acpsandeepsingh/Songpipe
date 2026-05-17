@@ -35,7 +35,7 @@ export default function App() {
       case 'home':
         return <VideoGrid onVideoSelect={setSelectedVideo} searchQuery={searchQuery} />;
       case 'library':
-        return <Library />;
+        return <Library onVideoSelect={setSelectedVideo} />;
       default:
         return <VideoGrid onVideoSelect={setSelectedVideo} searchQuery={searchQuery} />;
     }

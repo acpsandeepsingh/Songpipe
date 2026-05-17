@@ -16,6 +16,13 @@ export default function VideoPlayer({ video }: { video: any }) {
       const response = await fetch(`/api/video-info?id=${video.id}`);
       const data = await response.json();
       setVideoInfo(data);
+      
+      // Record to history
+      const history = JSON.parse(localStorage.getItem('history') || '[]');
+      const newEntry = { ...video, watchedAt: new Date().toISOString() };
+      const filtered = history.filter((v: any) => v.id !== video.id);
+      localStorage.setItem('history', JSON.stringify([newEntry, ...filtered].slice(0, 50)));
+      
     } catch (error) {
       console.error("Failed to fetch video info:", error);
     } finally {

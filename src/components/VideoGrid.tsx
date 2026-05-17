@@ -5,24 +5,31 @@ import CategoryBar from './CategoryBar';
 export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelect: (video: any) => void, searchQuery: string }) {
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState('All');
 
   useEffect(() => {
     async function fetchVideos() {
       setLoading(true);
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery || 'popular videos')}`);
+        let endpoint = `/api/search?q=${encodeURIComponent(searchQuery || 'new music 2024')}`;
+        
+        // Handle categories and trending
+        if (!searchQuery) {
+          if (activeCategory === 'All' || activeCategory === 'Trending' || activeCategory === "Today's Top") {
+            endpoint = '/api/trending';
+          } else {
+            endpoint = `/api/search?q=${encodeURIComponent(activeCategory + ' songs')}`;
+          }
+        }
+
+        const response = await fetch(endpoint);
         const data = await response.json();
-        const formatted = (data.items || []).map((item: any) => ({
-          id: item.id,
-          title: item.title,
-          thumbnail: item.thumbnail,
-          channelName: item.channelName || 'Unknown',
-          channelAvatar: item.channelAvatar,
-          views: item.views,
-          uploadedAt: item.uploadedAt,
-          duration: item.duration
-        }));
-        setVideos(formatted);
+        
+        if (data.items) {
+          setVideos(data.items);
+        } else {
+          setVideos([]);
+        }
       } catch (error) {
         console.error("Failed to fetch videos:", error);
       } finally {
@@ -30,15 +37,30 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
       }
     }
     fetchVideos();
-  }, [searchQuery]);
+  }, [searchQuery, activeCategory]);
 
-  if (loading) {
-    return (
-      <div className="flex flex-col">
-        <CategoryBar />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-2 sm:gap-y-10 pt-2 pb-10">
+  const GridContent = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-10 pt-2 pb-24">
+      {videos.map((video) => (
+        <VideoCard 
+          key={video.id} 
+          video={video} 
+          onClick={() => onVideoSelect(video)} 
+        />
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col">
+      <CategoryBar 
+        activeCategory={activeCategory} 
+        onCategorySelect={(cat) => setActiveCategory(cat)} 
+      />
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-2 sm:gap-y-10 pt-2 pb-10 px-3 sm:px-0">
           {[...Array(8)].map((_, i) => (
-            <div key={i} className="flex flex-col gap-3 animate-pulse px-3 sm:px-0 mb-4 sm:mb-0">
+            <div key={i} className="flex flex-col gap-3 animate-pulse mb-6">
               <div className="aspect-video bg-[#272727] sm:rounded-xl" />
               <div className="flex gap-3">
                 <div className="w-10 h-10 rounded-full bg-[#272727]" />
@@ -50,22 +72,9 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
             </div>
           ))}
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col">
-      <CategoryBar />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-0 sm:gap-y-8 pt-2 pb-10">
-        {videos.map((video) => (
-          <VideoCard 
-            key={video.id} 
-            video={video} 
-            onClick={() => onVideoSelect(video)} 
-          />
-        ))}
-      </div>
+      ) : (
+        <GridContent />
+      )}
     </div>
   );
 }

@@ -3,25 +3,61 @@ import path from "path";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import { Innertube } from 'youtubei.js';
+import yts from 'yt-search';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
   
-  let yt: Innertube;
-  try {
-    yt = await Innertube.create({
-      generate_session_locally: true,
-      retrieve_player: true,
-      device_category: 'ANDROID' as any
-    });
-    console.log("YouTube InnerTube initialized (Android Mode)");
-  } catch (err) {
-    console.error("Failed to initialize InnerTube:", err);
-  }
+  let yt: Innertube | null = null;
+  const initInnertube = async () => {
+    try {
+      yt = await Innertube.create({
+        generate_session_locally: true,
+        retrieve_player: true,
+        device_category: 'ANDROID' as any
+      });
+      console.log("YouTube InnerTube initialized (Android Mode)");
+    } catch (err) {
+      console.error("Failed to initialize InnerTube:", err);
+    }
+  };
+  await initInnertube();
 
   app.use(cors());
   app.use(express.json());
+
+  // Helper to ensure yt is ready
+  const getYT = async () => {
+    if (!yt) await initInnertube();
+    if (!yt) throw new Error("YouTube client not available");
+    return yt;
+  };
+
+  // Trending Music Endpoint
+  app.get("/api/trending", async (req, res) => {
+    try {
+      console.log("Fetching trending via yt-search...");
+      const results = await yts("trending music today 2024");
+      const videos = results.videos || [];
+      
+      res.json({
+        items: videos.slice(0, 30).map((v: any) => ({
+          id: v.videoId,
+          title: v.title,
+          thumbnail: v.thumbnail || v.image,
+          channelName: v.author?.name || 'Unknown',
+          channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.author?.name}`,
+          views: v.views?.toLocaleString() || '0 views',
+          uploadedAt: v.ago || 'Trending',
+          duration: v.timestamp || '0:00'
+        }))
+      });
+    } catch (error: any) {
+      console.error("Trending fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch trending", message: error.message });
+    }
+  });
 
   // Search Endpoint
   app.get("/api/search", async (req, res) => {
@@ -29,40 +65,38 @@ async function startServer() {
       const query = req.query.q as string;
       if (!query) return res.status(400).json({ error: "Query required" });
       
-      console.log(`Searching for: ${query}`);
-      const search = await yt.search(query, { type: 'video' });
-      
-      if (!search.videos || search.videos.length === 0) {
-        return res.json({ items: [] });
-      }
+      console.log(`Searching via yt-search for: ${query}`);
+      const results = await yts(query);
+      const videos = results.videos || [];
 
       res.json({
-        items: search.videos.map((v: any) => ({
+        items: videos.slice(0, 30).map((v: any) => ({
           type: 'video',
-          id: v.id,
-          title: v.title?.toString(),
-          thumbnail: v.thumbnails?.[0]?.url,
-          channelName: v.author?.name,
-          channelAvatar: v.author?.thumbnails?.[0]?.url || `https://i.pravatar.cc/150?u=${v.author?.name}`,
-          views: v.short_view_count?.toString() || v.view_count?.toString() || '0 views',
-          uploadedAt: v.published?.toString() || 'Recently',
-          duration: v.duration?.toString() || '0:00'
+          id: v.videoId,
+          title: v.title,
+          thumbnail: v.thumbnail || v.image,
+          channelName: v.author?.name || 'Unknown',
+          channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.author?.name}`,
+          views: v.views?.toLocaleString() || '0 views',
+          uploadedAt: v.ago || 'Recently',
+          duration: v.timestamp || '0:00'
         }))
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Search error:", error);
-      res.status(500).json({ error: "Search failed" });
+      res.status(500).json({ error: "Search failed", message: error.message });
     }
   });
 
   // Video Info & Extraction Endpoint
   app.get("/api/video-info", async (req, res) => {
     try {
+      const client = await getYT();
       const videoId = req.query.id as string;
       if (!videoId) return res.status(400).json({ error: "Video ID required" });
 
       console.log(`Extracting: ${videoId}`);
-      const info = await yt.getInfo(videoId);
+      const info = await client.getInfo(videoId);
       
       const adaptiveFormats = info.streaming_data?.adaptive_formats || [];
       const regularFormats = info.streaming_data?.formats || [];
