@@ -19,6 +19,21 @@ export default function VideoPlayer({ video }: { video: any }) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
 
+  const copyText = async (text: string, successMessage: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(successMessage);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      alert(successMessage);
+    }
+  };
+
   useEffect(() => {
     async function checkLiked() {
       try {
@@ -145,43 +160,33 @@ export default function VideoPlayer({ video }: { video: any }) {
   }
 
   if (!videoInfo || videoInfo.error || videoInfo.isMetadataOnly || !videoInfo.formats || (videoInfo.formats.audio.length === 0 && videoInfo.formats.video.length === 0)) {
+    const fullErrorObject = {
+      appState: 'Extraction Error',
+      videoId: video.id,
+      serverError: videoInfo,
+      nativeSystemInfo: nativeInfo,
+      browser: navigator.userAgent,
+      platform: Capacitor.getPlatform(),
+      timestamp: new Date().toISOString()
+    };
+    const fullErrorText = JSON.stringify(fullErrorObject, null, 2);
+    const errorParts = fullErrorText.length > 1800
+      ? [fullErrorText.slice(0, 1800), fullErrorText.slice(1800)]
+      : [fullErrorText];
+
+    const connectivityRootCause =
+      nativeInfo?.error?.includes('plugin is not implemented')
+        ? 'Native plugin not registered in this APK build + backend unreachable.'
+        : videoInfo?.message?.includes('All API candidates failed')
+          ? 'Backend host is unreachable from this device (localhost/10.0.2.2 issue).'
+          : 'Unknown extraction failure.';
+
     const copyFullError = () => {
-      const fullLog = {
-        appState: 'Extraction Error',
-        videoId: video.id,
-        serverError: videoInfo,
-        nativeSystemInfo: nativeInfo,
-        browser: navigator.userAgent,
-        platform: Capacitor.getPlatform(),
-        timestamp: new Date().toISOString()
-      };
-      const text = JSON.stringify(fullLog, null, 2);
-      navigator.clipboard.writeText(text).then(() => {
-        alert("CRITICAL ERROR LOG COPIED!\nPost this to the dev chat so we can fix Android 15 playback.");
-      }).catch(err => {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        alert("Error log copied!");
-      });
+      copyText(fullErrorText, "Full error log copied.");
     };
 
     const copySessionLog = () => {
-      const text = logger.getFullLog();
-      navigator.clipboard.writeText(text).then(() => {
-        alert("FULL SESSION LOG COPIED!\nThis contains every error since the app opened.");
-      }).catch(err => {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        alert("Session log copied!");
-      });
+      copyText(logger.getFullLog(), "Full session log copied.");
     };
 
     return (
@@ -197,6 +202,10 @@ export default function VideoPlayer({ video }: { video: any }) {
               ? "YouTube restricted: High-security content detected. Use Native Mode."
               : "Extraction failed due to YouTube's latest signature protocol updates."}
         </p>
+        <div className="bg-yellow-900/20 p-3 rounded-xl mb-4 w-full max-w-sm text-left border border-yellow-900/40 text-yellow-200 text-[11px]">
+          <span className="font-bold block mb-1">Root Cause</span>
+          {connectivityRootCause}
+        </div>
 
         {videoInfo?.message && (
           <div className="bg-red-950/20 p-4 rounded-2xl mb-8 w-full max-w-sm text-left border border-red-900/30 font-mono text-[11px] text-red-400 overflow-auto max-h-40 shadow-inner">
@@ -232,6 +241,22 @@ export default function VideoPlayer({ video }: { video: any }) {
              >
                FULL SESSION
              </button>
+             {errorParts[0] && (
+               <button 
+                 onClick={() => copyText(errorParts[0], "Error Part 1 copied.")}
+                 className="bg-white/5 text-[#aaa] px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
+               >
+                 ERROR 1
+               </button>
+             )}
+             {errorParts[1] && (
+               <button 
+                 onClick={() => copyText(errorParts[1], "Error Part 2 copied.")}
+                 className="bg-white/5 text-[#aaa] px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
+               >
+                 ERROR 2
+               </button>
+             )}
              <button 
                onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
                className="bg-white/5 text-white px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
