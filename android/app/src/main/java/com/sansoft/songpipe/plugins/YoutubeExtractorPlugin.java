@@ -45,6 +45,40 @@ public class YoutubeExtractorPlugin extends Plugin {
         return images.get(images.size() - 1).getUrl();
     }
 
+
+
+    private String getChannelThumbnailUrl(ChannelInfo info) {
+        try {
+            Object thumbnails = info.getClass().getMethod("getThumbnails").invoke(info);
+            if (thumbnails instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Image> images = (List<Image>) thumbnails;
+                return getBestThumbnailUrl(images);
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            Object avatars = info.getClass().getMethod("getAvatars").invoke(info);
+            if (avatars instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Image> images = (List<Image>) avatars;
+                return getBestThumbnailUrl(images);
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            Object avatarUrl = info.getClass().getMethod("getAvatarUrl").invoke(info);
+            if (avatarUrl instanceof String) {
+                return (String) avatarUrl;
+            }
+        } catch (Exception ignored) {
+        }
+
+        return null;
+    }
+
     @PluginMethod
     public void extractVideo(PluginCall call) {
         String videoId = call.getString("videoId");
@@ -119,7 +153,7 @@ public class YoutubeExtractorPlugin extends Plugin {
             JSObject result = new JSObject();
             result.put("id", info.getId());
             result.put("title", info.getName());
-            result.put("thumbnail", getBestThumbnailUrl(info.getThumbnails()));
+            result.put("thumbnail", getChannelThumbnailUrl(info));
             result.put("description", info.getDescription());
             result.put("subscriberCount", info.getSubscriberCount());
 
