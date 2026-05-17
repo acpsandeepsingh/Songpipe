@@ -33,18 +33,25 @@ export default function VideoPlayer({ video }: { video: any }) {
     try {
       setLoading(true);
       
+      let nativeHeaders = {};
       // Try Native Extraction if on Android
       if (Capacitor.getPlatform() === 'android') {
         try {
           console.log("Attempting native extraction...");
           const nativeResult = await YoutubeExtractor.extractVideo({ videoId: video.id });
           console.log("Native extraction triggered:", nativeResult);
+          
+          if (nativeResult.nativeMode) {
+             nativeHeaders = { 'X-Native-Mode': 'true' };
+          }
         } catch (nativeErr) {
           console.warn("Native bridge unavailable or failed:", nativeErr);
         }
       }
 
-      const response = await fetch(`/api/video-info?id=${video.id}`);
+      const response = await fetch(`/api/video-info?id=${video.id}`, {
+        headers: nativeHeaders
+      });
       const data = await response.json();
       setVideoInfo(data);
       
@@ -96,30 +103,30 @@ export default function VideoPlayer({ video }: { video: any }) {
     );
   }
 
-  if (!videoInfo || videoInfo.error || !videoInfo.formats) {
+  if (!videoInfo || videoInfo.error || !videoInfo.formats || (videoInfo.formats.audio.length === 0 && videoInfo.formats.video.length === 0)) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] text-center p-8 bg-[#121212] sm:rounded-xl border border-white/5 mx-4 sm:mx-0">
         <div className="w-16 h-16 bg-red-600/10 rounded-full flex items-center justify-center mb-4">
           <Share2 className="w-8 h-8 text-red-500" />
         </div>
-        <p className="text-white font-bold mb-2">Streaming Limited</p>
+        <h3 className="text-white font-bold text-lg mb-2">Extraction Blocked</h3>
         <p className="text-sm text-[#aaa] mb-6 max-w-xs px-6">
           {videoInfo?.message?.includes('Sign in') 
-            ? "This video is age-restricted or requires authentication." 
-            : "Direct streaming is limited on cloud servers for this video. Use the 'Extract' button for specific streams or watch on YouTube."}
+            ? "This video is restricted or requires authentication." 
+            : "Direct streaming is blocked on this network. If you are using the APK, try the 'Native' button below."}
         </p>
         <div className="flex flex-col gap-3 w-full max-w-[200px]">
           <button 
             onClick={fetchInfo}
-            className="bg-red-600 text-white px-8 py-2.5 rounded-full font-bold hover:bg-red-700 transition-colors active:scale-95 flex items-center justify-center gap-2"
+            className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-red-600/20"
           >
-            <Cpu className="w-4 h-4" /> Try Native/Retry
+            <Cpu className="w-5 h-5" /> Native Extraction
           </button>
           <button 
             onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
-            className="bg-white/10 text-white px-8 py-2.5 rounded-full font-bold hover:bg-white/20 transition-colors"
+            className="bg-white/5 text-white px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition-all border border-white/10"
           >
-            Open Original
+            Watch on YouTube
           </button>
         </div>
       </div>

@@ -106,20 +106,23 @@ async function startServer() {
       const url = req.query.url as string;
       if (!url) return res.status(400).send("URL required");
 
-      console.log(`Proxying stream: ${url.substring(0, 100)}...`);
+      const isNative = req.headers['x-native-mode'] === 'true' || req.query.native === 'true';
+      console.log(`Proxying stream ${isNative ? '[NATIVE]' : ''}: ${url.substring(0, 100)}...`);
 
       const response = await axios({
         method: 'get',
         url: url,
         responseType: 'stream',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': isNative 
+            ? 'com.google.android.youtube/19.11.38 (Linux; U; Android 14; en_US) gzip'
+            : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
           'Connection': 'keep-alive',
           'Range': req.headers.range || 'bytes=0-',
           'Referer': 'https://www.youtube.com/',
           'Origin': 'https://www.youtube.com'
         },
-        timeout: 15000 
+        timeout: 20000 
       });
 
       // Transfer headers
@@ -179,89 +182,82 @@ async function startServer() {
       let basicInfo: any;
 
       try {
-        // Method 1: Innertube getInfo (Most detailed)
+        // Method 1: Innertube getInfo
         info = await client.getInfo(videoId);
         streamingData = info.streaming_data || (info as any).playability_status?.streaming_data;
         basicInfo = info.basic_info;
+        
+        if (!streamingData && !basicInfo) throw new Error("Innertube returned empty data");
       } catch (e: any) {
-        console.warn(`Innertube getInfo failed for ${videoId}:`, e.message);
+        console.warn(`Innertube failed for ${videoId}, trying ytdl-core...`);
         try {
-          // Method 2: Innertube getBasicInfo
-          info = await client.getBasicInfo(videoId);
-          streamingData = info.streaming_data || (info as any).playability_status?.streaming_data;
-          basicInfo = info.basic_info;
+          // Method 2: YTDL-Core with more robust options
+          const ytdlInfo = await ytdl.getInfo(videoId, {
+            requestOptions: {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+              }
+            }
+          });
+          
+          const formats = ytdlInfo.formats || [];
+          if (formats.length === 0) throw new Error("No formats found via ytdl-core");
+
+          return res.json({
+            id: videoId,
+            title: ytdlInfo.videoDetails.title,
+            description: ytdlInfo.videoDetails.description,
+            thumbnails: ytdlInfo.videoDetails.thumbnails,
+            author: {
+              name: ytdlInfo.videoDetails.author.name,
+              avatar: ytdlInfo.videoDetails.author.thumbnails?.[0]?.url
+            },
+            viewCount: ytdlInfo.videoDetails.viewCount,
+            publishDate: ytdlInfo.videoDetails.publishDate,
+            formats: {
+              audio: formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
+                url: f.url,
+                proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
+                quality: f.audioQuality || 'Standard',
+                container: f.mimeType || 'audio/mp4',
+                bitrate: f.bitrate,
+                id: f.itag
+              })),
+              video: formats.filter(f => f.hasVideo).map(f => ({
+                url: f.url,
+                proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
+                quality: f.qualityLabel || 'Standard',
+                container: f.mimeType || 'video/mp4',
+                bitrate: f.bitrate,
+                id: f.itag
+              }))
+            }
+          });
         } catch (e2: any) {
-          console.warn(`Innertube failed, trying ytdl-core fallback...`);
-          // Method 3: YTDL-Core
-          try {
-             const ytdlInfo = await ytdl.getInfo(videoId, {
-                requestOptions: {
-                   headers: {
-                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                   }
-                }
-             });
-             const bestThumbnail = ytdlInfo.videoDetails.thumbnails.pop();
-             
-             return res.json({
-               id: videoId,
-               title: ytdlInfo.videoDetails.title,
-               description: ytdlInfo.videoDetails.description,
-               thumbnails: bestThumbnail ? [bestThumbnail] : [],
-               author: {
-                 name: ytdlInfo.videoDetails.author.name,
-                 avatar: ytdlInfo.videoDetails.author.thumbnails?.[0]?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${ytdlInfo.videoDetails.author.name}`
-               },
-               viewCount: ytdlInfo.videoDetails.viewCount,
-               publishDate: ytdlInfo.videoDetails.publishDate || 'Recently',
-               formats: {
-                 audio: ytdlInfo.formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
-                   url: f.url,
-                   proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
-                   quality: f.audioQuality || 'Standard',
-                   container: f.mimeType || 'audio/mp4',
-                   bitrate: f.bitrate,
-                   id: f.itag
-                 })),
-                 video: ytdlInfo.formats.filter(f => f.hasVideo).map(f => ({
-                   url: f.url,
-                   proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
-                   quality: f.qualityLabel || 'Standard',
-                   container: f.mimeType || 'video/mp4',
-                   bitrate: f.bitrate,
-                   id: f.itag
-                 }))
-               }
-             });
-          } catch (e3: any) {
-             console.error("YTDL-Core also failed:", e3.message);
-             // Method 4: Scrape search results for basic data if nothing else works
-             try {
-               const searchResults = await yts({ videoId });
-               if (searchResults) {
-                 return res.json({
-                   id: videoId,
-                   title: (searchResults as any).title,
-                   thumbnails: [{ url: (searchResults as any).thumbnail }],
-                   author: { name: (searchResults as any).author?.name },
-                   formats: { audio: [], video: [] },
-                   error: true,
-                   message: "Direct extraction blocked. Using YouTube fallback."
-                 });
-               }
-             } catch (e4) {
-                return res.status(500).json({ error: "All extraction methods failed", message: e3.message });
-             }
-          }
+          console.error(`Final extraction failure for ${videoId}:`, e2.message);
+          // Method 3: Search fallback (Only metadata, no streams)
+          const results = await yts({ videoId });
+          return res.json({
+            id: videoId,
+            title: (results as any).title,
+            thumbnails: [{ url: (results as any).thumbnail }],
+            author: { name: (results as any).author?.name },
+            formats: { audio: [], video: [] },
+            error: true,
+            message: e2.message
+          });
         }
-      }
-      
-      if (!streamingData && !basicInfo) {
-        throw new Error("No playback data available (potentially age restricted or private)");
       }
 
       const adaptiveFormats = streamingData?.adaptive_formats || [];
       const regularFormats = streamingData?.formats || [];
+
+      const isNative = req.headers['x-native-mode'] === 'true';
 
       const processFormat = (f: any) => {
         let directUrl = "";
@@ -271,9 +267,13 @@ async function startServer() {
           directUrl = f.url || "";
         }
         
+        const proxyUrl = directUrl 
+          ? `/api/stream?url=${encodeURIComponent(directUrl)}${isNative ? '&native=true' : ''}` 
+          : "";
+
         return {
           url: directUrl,
-          proxyUrl: directUrl ? `/api/stream?url=${encodeURIComponent(directUrl)}` : "",
+          proxyUrl: proxyUrl,
           quality: f.quality_label || f.audio_quality || f.quality || 'Standard',
           container: f.mime_type || 'video/mp4',
           bitrate: f.bitrate,
