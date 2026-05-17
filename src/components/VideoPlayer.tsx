@@ -8,7 +8,9 @@ import { Capacitor } from '@capacitor/core';
 
 export default function VideoPlayer({ video }: { video: any }) {
   const [videoInfo, setVideoInfo] = useState<any>(null);
+  const [nativeInfo, setNativeInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [errorDetails, setErrorDetails] = useState<string>('');
   const [isExtractionOpen, setIsExtractionOpen] = useState(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -40,6 +42,7 @@ export default function VideoPlayer({ video }: { video: any }) {
           console.log("Attempting native extraction...");
           const nativeResult = await YoutubeExtractor.extractVideo({ videoId: video.id });
           console.log("Native extraction triggered:", nativeResult);
+          setNativeInfo(nativeResult);
           
           if (nativeResult.nativeMode) {
              nativeHeaders = { 'X-Native-Mode': 'true' };
@@ -54,6 +57,9 @@ export default function VideoPlayer({ video }: { video: any }) {
       });
       const data = await response.json();
       setVideoInfo(data);
+      if (data.error) {
+        setErrorDetails(JSON.stringify(data, null, 2));
+      }
       
       // Record to Firestore public history
       try {
@@ -104,24 +110,52 @@ export default function VideoPlayer({ video }: { video: any }) {
   }
 
   if (!videoInfo || videoInfo.error || !videoInfo.formats || (videoInfo.formats.audio.length === 0 && videoInfo.formats.video.length === 0)) {
+    const copyFullError = () => {
+      const fullLog = {
+        appState: 'Extraction Error',
+        videoId: video.id,
+        serverError: videoInfo,
+        nativeSystemInfo: nativeInfo,
+        browser: navigator.userAgent,
+        timestamp: new Date().toISOString()
+      };
+      navigator.clipboard.writeText(JSON.stringify(fullLog, null, 2));
+      alert("Error log copied to clipboard! Share it with the developer.");
+    };
+
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] text-center p-8 bg-[#121212] sm:rounded-xl border border-white/5 mx-4 sm:mx-0">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[400px] text-center p-8 bg-[#121212] sm:rounded-xl border border-white/5 mx-4 sm:mx-0">
         <div className="w-16 h-16 bg-red-600/10 rounded-full flex items-center justify-center mb-4">
           <Share2 className="w-8 h-8 text-red-500" />
         </div>
-        <h3 className="text-white font-bold text-lg mb-2">Extraction Blocked</h3>
+        <h3 className="text-white font-bold text-lg mb-2 tracking-tight">Extraction Blocked</h3>
         <p className="text-sm text-[#aaa] mb-6 max-w-xs px-6">
           {videoInfo?.message?.includes('Sign in') 
-            ? "This video is restricted or requires authentication." 
-            : "Direct streaming is blocked on this network. If you are using the APK, try the 'Native' button below."}
+            ? "This video is age-restricted or private. Native bypass required." 
+            : "Streaming is blocked on this network logic. If in APK, try Native Extraction."}
         </p>
-        <div className="flex flex-col gap-3 w-full max-w-[200px]">
+
+        {videoInfo?.message && (
+          <div className="bg-black/50 p-4 rounded-xl mb-6 w-full max-w-sm text-left border border-white/10 font-mono text-[10px] text-red-400 overflow-auto max-h-32">
+            LOG: {videoInfo.message}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 w-full max-w-[220px]">
           <button 
             onClick={fetchInfo}
             className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-red-600/20"
           >
             <Cpu className="w-5 h-5" /> Native Extraction
           </button>
+          
+          <button 
+            onClick={copyFullError}
+            className="bg-white/5 text-[#aaa] px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition-all border border-dashed border-white/20 text-xs"
+          >
+            Copy Full Error Log
+          </button>
+
           <button 
             onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
             className="bg-white/5 text-white px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition-all border border-white/10"

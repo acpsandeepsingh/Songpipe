@@ -171,10 +171,11 @@ async function startServer() {
   // Video Info & Extraction Endpoint
   app.get("/api/video-info", async (req, res) => {
     const videoId = req.query.id as string;
+    const isNative = req.headers['x-native-mode'] === 'true';
     try {
       if (!videoId) return res.status(400).json({ error: "Video ID required" });
 
-      console.log(`Extracting for: ${videoId}`);
+      console.log(`Extracting ${isNative ? '[NATIVE]' : ''} for: ${videoId}`);
       const client = await getYT();
       
       let info: any;

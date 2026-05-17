@@ -28,20 +28,26 @@ public class YoutubeExtractorPlugin extends Plugin {
             return;
         }
 
-        Log.d("YoutubeExtractor", "Native extraction requested for videoId: " + videoId);
+        Log.d("YoutubeExtractor", "Native diagnostic check for: " + videoId);
 
         try {
-            // In a native APK context, we use the Android system client to bypass bot detection
             JSObject ret = new JSObject();
             ret.put("nativeMode", true);
             ret.put("videoId", videoId);
             ret.put("userAgent", System.getProperty("http.agent"));
-            ret.put("platform", "Android-" + android.os.Build.VERSION.RELEASE);
+            ret.put("androidVersion", android.os.Build.VERSION.RELEASE);
+            ret.put("model", android.os.Build.MODEL);
             
-            // We tell the JS layer that native extraction is prepared
+            // Check network info
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getContext().getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+            android.net.NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+            boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();
+            ret.put("networkType", activeNetwork != null ? activeNetwork.getTypeName() : "NONE");
+            ret.put("isConnected", isConnected);
+            
             call.resolve(ret);
         } catch (Exception e) {
-            Log.e("YoutubeExtractor", "Native logic failed", e);
+            Log.e("YoutubeExtractor", "Diagnostic failed", e);
             call.reject(e.getMessage());
         }
     }
