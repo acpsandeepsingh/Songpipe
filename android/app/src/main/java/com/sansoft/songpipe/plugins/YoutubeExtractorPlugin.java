@@ -11,6 +11,10 @@ import org.schabi.newpipe.extractor.NewPipe;
 import org.schabi.newpipe.extractor.StreamingService;
 import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.channel.ChannelInfo;
+import org.schabi.newpipe.extractor.kiosk.KioskInfo;
+import org.schabi.newpipe.extractor.search.SearchInfo;
+import org.schabi.newpipe.extractor.InfoItem;
+import org.schabi.newpipe.extractor.stream.StreamInfoItem;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 import org.schabi.newpipe.extractor.stream.AudioStream;
@@ -95,6 +99,72 @@ public class YoutubeExtractorPlugin extends Plugin {
         }, throwable -> {
             call.reject("Extraction failed: " + throwable.getMessage());
         });
+    }
+
+    @PluginMethod
+    public void trending(PluginCall call) {
+        Single.fromCallable(() -> {
+            StreamingService service = NewPipe.getServiceByUrl("https://www.youtube.com");
+            return KioskInfo.getInfo(service, "Trending");
+        })
+        .subscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(info -> {
+            JSArray items = new JSArray();
+            for (InfoItem raw : info.getRelatedItems()) {
+                if (raw instanceof StreamInfoItem) {
+                    StreamInfoItem item = (StreamInfoItem) raw;
+                    JSObject i = new JSObject();
+                    i.put("id", item.getUrl() != null ? item.getUrl().replace("https://www.youtube.com/watch?v=", "") : "");
+                    i.put("title", item.getName());
+                    i.put("thumbnail", firstImageUrl(item.getThumbnails()));
+                    i.put("channelName", item.getUploaderName());
+                    i.put("views", String.valueOf(item.getViewCount()));
+                    i.put("uploadedAt", item.getTextualUploadDate());
+                    i.put("duration", item.getDuration() > 0 ? String.valueOf(item.getDuration()) : "0");
+                    items.put(i);
+                }
+            }
+            JSObject result = new JSObject();
+            result.put("items", items);
+            call.resolve(result);
+        }, throwable -> call.reject("Trending failed: " + throwable.getMessage()));
+    }
+
+    @PluginMethod
+    public void search(PluginCall call) {
+        String query = call.getString("query");
+        if (query == null || query.trim().isEmpty()) {
+            call.reject("Query is required");
+            return;
+        }
+
+        Single.fromCallable(() -> {
+            StreamingService service = NewPipe.getServiceByUrl("https://www.youtube.com");
+            return SearchInfo.getInfo(service, query);
+        })
+        .subscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(info -> {
+            JSArray items = new JSArray();
+            for (InfoItem raw : info.getRelatedItems()) {
+                if (raw instanceof StreamInfoItem) {
+                    StreamInfoItem item = (StreamInfoItem) raw;
+                    JSObject i = new JSObject();
+                    i.put("id", item.getUrl() != null ? item.getUrl().replace("https://www.youtube.com/watch?v=", "") : "");
+                    i.put("title", item.getName());
+                    i.put("thumbnail", firstImageUrl(item.getThumbnails()));
+                    i.put("channelName", item.getUploaderName());
+                    i.put("views", String.valueOf(item.getViewCount()));
+                    i.put("uploadedAt", item.getTextualUploadDate());
+                    i.put("duration", item.getDuration() > 0 ? String.valueOf(item.getDuration()) : "0");
+                    items.put(i);
+                }
+            }
+            JSObject result = new JSObject();
+            result.put("items", items);
+            call.resolve(result);
+        }, throwable -> call.reject("Search failed: " + throwable.getMessage()));
     }
 
     @PluginMethod
