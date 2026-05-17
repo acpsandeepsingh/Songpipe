@@ -49,15 +49,40 @@ async function startServer() {
   app.get("/api/trending", async (req, res) => {
     try {
       console.log("Fetching trending results via yt-search...");
-      // yt-search is much faster and more reliable than Innertube for general lists
-      const results = await yts("trending songs 2024 music");
+      let results: any;
+      try {
+        results = await yts("trending songs 2024 music");
+      } catch (err) {
+        console.warn("yt-search failed for trending, trying fallback query...");
+        results = await yts("latest hindi and english music 2024");
+      }
+      
+      if (!results || !results.videos || results.videos.length === 0) {
+        // Ultimate fallback: Try searching via youtubei.js
+        try {
+          const client = await getYT();
+          const search = await client.search("trending music", { type: 'video' });
+          const items = search.results?.map((v: any) => ({
+            id: v.id,
+            title: v.title?.toString(),
+            thumbnail: v.thumbnails?.[0]?.url,
+            channelName: v.author?.name || 'YouTube',
+            views: v.view_count?.toString() || '0 views',
+            uploadedAt: v.published?.toString() || 'Trending',
+            duration: v.duration?.toString() || '0:00'
+          })) || [];
+          return res.json({ items });
+        } catch (innerErr) {
+          console.error("Innertube trending fallback failed:", innerErr);
+        }
+      }
       
       const items = (results.videos || []).slice(0, 40).map((v: any) => ({
         id: v.videoId,
         title: v.title,
         thumbnail: v.thumbnail || v.image,
         channelName: v.author?.name || 'Unknown',
-        channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.author?.name}`,
+        channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(v.author?.name || 'YouTube')}`,
         views: (v.views || 0).toLocaleString() + ' views',
         uploadedAt: v.ago || 'Trending',
         duration: v.timestamp || '0:00'
@@ -66,7 +91,7 @@ async function startServer() {
       res.json({ items });
     } catch (error: any) {
       console.error("Trending fetch critical failure:", error);
-      res.json({ items: [] });
+      res.json({ items: [], error: error.message });
     }
   });
 
@@ -77,8 +102,24 @@ async function startServer() {
       if (!query) return res.status(400).json({ error: "Query required" });
       
       console.log(`Searching for: ${query} via yt-search`);
-      // yt-search is extremely fast and reliable
-      const results = await yts(query);
+      let results: any;
+      try {
+        results = await yts(query);
+      } catch (err) {
+        console.warn("yt-search failed for search, trying Innertube...");
+        const client = await getYT();
+        const search = await client.search(query, { type: 'video' });
+        const items = search.results?.map((v: any) => ({
+          id: v.id,
+          title: v.title?.toString(),
+          thumbnail: v.thumbnails?.[0]?.url,
+          channelName: v.author?.name || 'YouTube',
+          views: v.view_count?.toString() || '0 views',
+          uploadedAt: v.published?.toString() || 'Recently',
+          duration: v.duration?.toString() || '0:00'
+        })) || [];
+        return res.json({ items });
+      }
       
       const items = (results.videos || []).map((v: any) => ({
         type: 'video',
@@ -86,17 +127,16 @@ async function startServer() {
         title: v.title,
         thumbnail: v.thumbnail || v.image,
         channelName: v.author?.name || 'Unknown',
-        channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.author?.name}`,
+        channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(v.author?.name || 'YouTube')}`,
         views: (v.views || 0).toLocaleString() + ' views',
         uploadedAt: v.ago || 'Recently',
         duration: v.timestamp || '0:00'
       }));
 
-      // No fallback needed if yt-search works, it's very reliable
       res.json({ items });
     } catch (error: any) {
       console.error("Search critical failure:", error);
-      res.json({ items: [] });
+      res.json({ items: [], error: error.message });
     }
   });
 

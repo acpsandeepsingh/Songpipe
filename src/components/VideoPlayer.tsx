@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal, ChevronDown, ChevronUp, Cpu } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal, ChevronDown, ChevronUp, Cpu, Music, Video } from 'lucide-react';
 import ExtractionDialog from './ExtractionDialog';
 import { db } from '../lib/firebase';
 import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
@@ -55,6 +55,11 @@ export default function VideoPlayer({ video }: { video: any }) {
       const response = await fetch(`/api/video-info?id=${video.id}`, {
         headers: nativeHeaders
       });
+      
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}: ${await response.text()}`);
+      }
+      
       const data = await response.json();
       setVideoInfo(data);
       if (data.error) {
@@ -76,8 +81,9 @@ export default function VideoPlayer({ video }: { video: any }) {
         localStorage.setItem('history', JSON.stringify([{ ...video, watchedAt: new Date().toISOString() }, ...filtered].slice(0, 50)));
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch video info:", error);
+      setVideoInfo({ error: true, message: error.message || "Network Error" });
     } finally {
       setLoading(false);
     }
@@ -117,51 +123,71 @@ export default function VideoPlayer({ video }: { video: any }) {
         serverError: videoInfo,
         nativeSystemInfo: nativeInfo,
         browser: navigator.userAgent,
+        platform: Capacitor.getPlatform(),
         timestamp: new Date().toISOString()
       };
-      navigator.clipboard.writeText(JSON.stringify(fullLog, null, 2));
-      alert("Error log copied to clipboard! Share it with the developer.");
+      const text = JSON.stringify(fullLog, null, 2);
+      navigator.clipboard.writeText(text).then(() => {
+        alert("CRITICAL ERROR LOG COPIED!\nPost this to the dev chat so we can fix Android 15 playback.");
+      }).catch(err => {
+        // Fallback for some browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert("Error log copied (fallback method)!");
+      });
     };
 
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[400px] text-center p-8 bg-[#121212] sm:rounded-xl border border-white/5 mx-4 sm:mx-0">
-        <div className="w-16 h-16 bg-red-600/10 rounded-full flex items-center justify-center mb-4">
-          <Share2 className="w-8 h-8 text-red-500" />
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[450px] text-center p-8 bg-[#0f0f0f] sm:rounded-xl border-x border-b border-white/5 mx-0">
+        <div className="w-20 h-20 bg-red-600/10 rounded-full flex items-center justify-center mb-6 border border-red-600/20">
+          <Share2 className="w-10 h-10 text-red-600" />
         </div>
-        <h3 className="text-white font-bold text-lg mb-2 tracking-tight">Extraction Blocked</h3>
-        <p className="text-sm text-[#aaa] mb-6 max-w-xs px-6">
+        <h3 className="text-white font-black text-xl mb-3 tracking-tighter uppercase">Extraction Blocked</h3>
+        <p className="text-sm text-[#aaa] mb-8 max-w-xs px-2 font-medium leading-relaxed">
           {videoInfo?.message?.includes('Sign in') 
-            ? "This video is age-restricted or private. Native bypass required." 
-            : "Streaming is blocked on this network logic. If in APK, try Native Extraction."}
+            ? "YouTube requires authentication for this content. Use Original button." 
+            : "Direct streaming failed. This is common on cloud servers. Use the diagnostics below."}
         </p>
 
         {videoInfo?.message && (
-          <div className="bg-black/50 p-4 rounded-xl mb-6 w-full max-w-sm text-left border border-white/10 font-mono text-[10px] text-red-400 overflow-auto max-h-32">
-            LOG: {videoInfo.message}
+          <div className="bg-red-950/20 p-4 rounded-2xl mb-8 w-full max-w-sm text-left border border-red-900/30 font-mono text-[11px] text-red-400 overflow-auto max-h-40 shadow-inner">
+            <div className="flex justify-between items-center mb-2 border-b border-red-900/40 pb-1">
+               <span className="font-black text-[9px] uppercase tracking-widest text-red-500/50">Debug Console</span>
+               <div className="flex gap-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500/50" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500/30" />
+               </div>
+            </div>
+            {videoInfo.message}
           </div>
         )}
 
-        <div className="flex flex-col gap-3 w-full max-w-[220px]">
+        <div className="flex flex-col gap-3 w-full max-w-[260px]">
           <button 
             onClick={fetchInfo}
-            className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-red-600/20"
+            className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black text-sm hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-xl shadow-red-600/30 tracking-tight"
           >
-            <Cpu className="w-5 h-5" /> Native Extraction
+            <Cpu className="w-5 h-5" /> RETRY NATIVE MODE
           </button>
           
-          <button 
-            onClick={copyFullError}
-            className="bg-white/5 text-[#aaa] px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition-all border border-dashed border-white/20 text-xs"
-          >
-            Copy Full Error Log
-          </button>
-
-          <button 
-            onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
-            className="bg-white/5 text-white px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition-all border border-white/10"
-          >
-            Watch on YouTube
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+             <button 
+               onClick={copyFullError}
+               className="bg-white/5 text-[#aaa] px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
+             >
+               COPY LOG
+             </button>
+             <button 
+               onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
+               className="bg-white/5 text-white px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
+             >
+               YOUTUBE
+             </button>
+          </div>
         </div>
       </div>
     );
@@ -264,13 +290,17 @@ export default function VideoPlayer({ video }: { video: any }) {
             
             <button 
               onClick={() => setIsExtractionOpen(true)}
-              className="flex items-center gap-2 bg-red-600 px-5 py-2 rounded-full hover:bg-red-700 shrink-0 font-bold text-sm shadow-lg active:scale-95 transition-all text-white animate-pulse-slow"
+              className="flex items-center gap-2 bg-red-600 px-5 py-2.5 rounded-xl hover:bg-red-700 shrink-0 font-black text-sm shadow-lg active:scale-95 transition-all text-white"
             >
-              <Download className="w-5 h-5" /> <span>Extract</span>
+              <Download className="w-5 h-5" /> <span>Download</span>
             </button>
 
-            <button className="flex items-center gap-2 bg-[#272727] px-5 py-2 rounded-full hover:bg-[#3f3f3f] shrink-0 font-medium text-sm transition-colors active:bg-white/10">
-              <Share2 className="w-5 h-5" /> <span>Share</span>
+            <button className="flex items-center gap-2 bg-[#272727] px-5 py-2.5 rounded-xl hover:bg-[#3f3f3f] shrink-0 font-black text-sm transition-all active:scale-95">
+              <Music className="w-5 h-5 text-red-500" /> <span>Background</span>
+            </button>
+
+            <button className="flex items-center gap-2 bg-[#272727] px-5 py-2.5 rounded-xl hover:bg-[#3f3f3f] shrink-0 font-black text-sm transition-all active:scale-95">
+              <Video className="w-5 h-5 text-blue-500" /> <span>Popup</span>
             </button>
             
             <button className="p-2.5 bg-[#272727] rounded-full hover:bg-[#3f3f3f] shrink-0 transition-colors active:bg-white/10">
