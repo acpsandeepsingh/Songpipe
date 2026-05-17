@@ -19,6 +19,7 @@ export default function VideoPlayer({ video }: { video: any }) {
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [extractionTrace, setExtractionTrace] = useState<any[]>([]);
   const configErrorLoggedForVideo = useRef<string | null>(null);
 
   useEffect(() => {
@@ -37,9 +38,17 @@ export default function VideoPlayer({ video }: { video: any }) {
   }, [video.id]);
 
   const fetchInfo = async () => {
+    const trace: any[] = [];
+    const step = (name: string, detail?: any) => {
+      const entry = { t: new Date().toISOString(), step: name, detail };
+      trace.push(entry);
+      logger.add('info', `[ExtractStep] ${name}`, detail);
+    };
     logger.markFunctionCall('src/components/VideoPlayer.tsx', 'fetchInfo', { videoId: video.id });
     try {
       setLoading(true);
+      setExtractionTrace([]);
+      step('start', { videoId: video.id, platform: Capacitor.getPlatform() });
       
       let nativeHeaders: any = {};
       let nativeData: any = null;
@@ -47,8 +56,10 @@ export default function VideoPlayer({ video }: { video: any }) {
       // Try Native Extraction if on Android
       if (Capacitor.getPlatform() === 'android') {
         try {
+          step('native_extract_attempt');
           console.log("Attempting native extraction...");
           const nativeResult = await YoutubeExtractor.extractVideo({ videoId: video.id });
+          step('native_extract_success', { extractor: nativeResult?.extractor, audioCount: nativeResult?.formats?.audio?.length || 0 });
           console.log("Native extraction response:", nativeResult);
           setNativeInfo(nativeResult);
           
@@ -68,6 +79,7 @@ export default function VideoPlayer({ video }: { video: any }) {
         } catch (nativeErr) {
           nativeError = nativeErr;
           const n: any = nativeErr as any;
+          step('native_extract_failed', { message: n?.message || String(n), code: n?.code });
           logger.add('error', 'Native extraction failed', {
             videoId: video.id,
             message: n?.message || String(n),
@@ -80,9 +92,12 @@ export default function VideoPlayer({ video }: { video: any }) {
 
       const apiConfigError = getApiConfigError();
       if (apiConfigError) {
+        step('api_config_missing');
         if (nativeData && nativeData.formats?.audio?.length > 0) {
+          step('using_native_data_without_backend');
           setVideoInfo(nativeData);
           setLoading(false);
+          setExtractionTrace(trace);
           return;
         }
         if (configErrorLoggedForVideo.current !== video.id) {
@@ -97,6 +112,7 @@ export default function VideoPlayer({ video }: { video: any }) {
             : 'Local mode active. Native extraction failed for this video. Please retry or open directly on YouTube.'
         });
         setLoading(false);
+        setExtractionTrace(trace);
         return;
       }
 
@@ -106,6 +122,7 @@ export default function VideoPlayer({ video }: { video: any }) {
       const response = await fetch(infoEndpoint, {
         headers: nativeHeaders
       });
+      step('server_video_info_fetch', { endpoint: infoEndpoint, status: response.status });
       
       const contentType = response.headers.get("content-type");
       if (contentType && !contentType.includes("application/json")) {
@@ -114,10 +131,12 @@ export default function VideoPlayer({ video }: { video: any }) {
       }
       
       const data = await response.json();
+      step('server_video_info_json_parsed');
       
       // If native data is better (has formats when server doesn't), use it
       const finalData = (nativeData && nativeData.formats?.audio?.length > 0) ? nativeData : data;
       setVideoInfo(finalData);
+      step('final_data_selected', { source: nativeData && nativeData.formats?.audio?.length > 0 ? 'native' : 'server' });
       
       if (finalData.error && !nativeData) {
         setErrorDetails(JSON.stringify(finalData, null, 2));
@@ -146,8 +165,10 @@ export default function VideoPlayer({ video }: { video: any }) {
         console.error(`Failed to fetch video info: ${errorMessage}`);
       }
       setVideoInfo({ error: true, message: errorMessage });
+      step('fatal_error', { error: errorMessage });
     } finally {
       setLoading(false);
+      setExtractionTrace(trace);
     }
   };
 
@@ -199,6 +220,12 @@ export default function VideoPlayer({ video }: { video: any }) {
         document.execCommand('copy');
         document.body.removeChild(textarea);
         alert("Error log copied!");
+      });
+    };
+
+    const copyExtractionTrace = () => {
+      navigator.clipboard.writeText(JSON.stringify(extractionTrace, null, 2)).then(() => {
+        alert("Extraction step trace copied.");
       });
     };
 
@@ -264,6 +291,12 @@ export default function VideoPlayer({ video }: { video: any }) {
                className="bg-white/5 text-[#aaa] px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
              >
                FULL SESSION
+             </button>
+             <button 
+               onClick={copyExtractionTrace}
+               className="bg-white/5 text-[#aaa] px-4 py-3 rounded-2xl font-black transition-all border border-white/10 text-[10px] uppercase tracking-wider hover:bg-white/10 active:scale-95"
+             >
+               EXTRACT TRACE
              </button>
              <button 
                onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
