@@ -13,14 +13,13 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
       setLoading(true);
       try {
         const timestamp = new Date().getTime();
-        let endpoint = `/api/search?q=${encodeURIComponent(searchQuery || 'new music 2024')}&t=${timestamp}`;
+        let queryParams = `t=${timestamp}`;
+        let endpoint = `/api/trending?${queryParams}`;
         
-        if (!searchQuery) {
-          if (activeCategory === 'All' || activeCategory === 'Trending' || activeCategory === "Today's Top") {
-            endpoint = `/api/trending?t=${timestamp}`;
-          } else {
-            endpoint = `/api/search?q=${encodeURIComponent(activeCategory + ' songs')}&t=${timestamp}`;
-          }
+        if (searchQuery) {
+          endpoint = `/api/search?q=${encodeURIComponent(searchQuery)}&${queryParams}`;
+        } else if (activeCategory !== 'All' && activeCategory !== 'Trending' && activeCategory !== "Today's Top") {
+          endpoint = `/api/search?q=${encodeURIComponent(activeCategory + ' songs')}&${queryParams}`;
         }
 
         let response;

@@ -28,25 +28,26 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
   
-  // Debug Request Logger
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) {
-      console.log(`[API] ${req.method} ${req.path} ${req.query.id || ''}`);
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    }
-    next();
-  });
-
-  // Global API Routing Protection
+  // Global API Routing Protection & Logger
   app.use('/api', (req, res, next) => {
+    console.log(`[API Request] ${req.method} ${req.url}`);
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     next();
   });
 
   // Helper to ensure yt is ready
   const getYT = async () => {
-    if (!yt) await initInnertube();
-    if (!yt) throw new Error("YouTube client not available");
+    if (!yt) {
+      try {
+        yt = await Innertube.create({
+           generate_session_locally: true,
+           fetch: (input: any, init: any) => fetch(input, { ...init, timeout: 15000 })
+        });
+      } catch (e) {
+        console.error("Innertube init failed:", e);
+      }
+    }
     return yt;
   };
 
@@ -280,165 +281,109 @@ async function startServer() {
 
       console.log(`Extracting ${isNative ? '[NATIVE]' : ''} for: ${videoId}`);
       const client = await getYT();
+      if (!client) throw new Error("YouTube client unavailable");
       
       let info: any;
-      let streamingData: any;
-      let basicInfo: any;
-
       try {
-        // Method 1: Innertube getInfo
         info = await client.getInfo(videoId);
-        streamingData = info.streaming_data || (info as any).playability_status?.streaming_data;
-        basicInfo = info.basic_info;
-        
-        if (!streamingData && !basicInfo) throw new Error("Innertube returned empty data");
       } catch (e: any) {
-        console.warn(`Innertube failed for ${videoId}, trying ytdl-core...`);
-        try {
-          // Method 2: YTDL-Core with more robust options
-          const ytdlInfo = await ytdl.getInfo(videoId, {
-            requestOptions: {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Windows"',
-              }
-            }
-          });
-          
-          const formats = ytdlInfo.formats || [];
-          if (formats.length === 0) throw new Error("No formats found via ytdl-core");
-
-          return res.json({
-            id: videoId,
-            title: ytdlInfo.videoDetails.title,
-            description: ytdlInfo.videoDetails.description,
-            thumbnails: ytdlInfo.videoDetails.thumbnails,
-            author: {
-              name: ytdlInfo.videoDetails.author.name,
-              avatar: ytdlInfo.videoDetails.author.thumbnails?.[0]?.url
-            },
-            viewCount: ytdlInfo.videoDetails.viewCount,
-            publishDate: ytdlInfo.videoDetails.publishDate,
-            formats: {
-              audio: formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
-                url: f.url,
-                proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
-                quality: f.audioQuality || 'Standard',
-                container: f.mimeType || 'audio/mp4',
-                bitrate: f.bitrate,
-                id: f.itag
-              })),
-              video: formats.filter(f => f.hasVideo).map(f => ({
-                url: f.url,
-                proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
-                quality: f.qualityLabel || 'Standard',
-                container: f.mimeType || 'video/mp4',
-                bitrate: f.bitrate,
-                id: f.itag
-              }))
-            }
-          });
-        } catch (e2: any) {
-          console.error(`Final extraction failure for ${videoId}:`, e2.message);
-          // Method 3: Search fallback (Only metadata, no streams)
-          try {
-            const results = await yts({ videoId });
-            if (results) {
-              return res.json({
-                id: videoId,
-                title: (results as any).title,
-                description: (results as any).description,
-                thumbnails: [{ url: (results as any).thumbnail }],
-                author: { 
-                  name: (results as any).author?.name || "YouTube Artist",
-                  avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent((results as any).author?.name || 'YouTube')}`
-                },
-                viewCount: (results as any).views,
-                publishDate: (results as any).ago || 'Unknown',
-                formats: { audio: [], video: [] },
-                error: true,
-                message: e2.message || "Streams unavailable on server",
-                isMetadataOnly: true
-              });
-            }
-          } catch (e3) {}
-          
-          throw e2;
-        }
+        console.warn(`Innertube failed for ${videoId}, trying ytdl-core fallback...`);
+        // We'll fall back to search later if ytdl also fails
       }
 
-      const isNativeHeader = req.headers['x-native-mode'] === 'true' || req.query.native === 'true';
+      if (info) {
+        const streamingData = info.streaming_data || (info as any).playability_status?.streaming_data;
+        const basicInfo = info.basic_info;
+        const adaptiveFormats = streamingData?.adaptive_formats || [];
+        const regularFormats = streamingData?.formats || [];
 
-      const processFormat = (f: any) => {
-        let directUrl = "";
-        try {
-          directUrl = f.decipher ? f.decipher(client.session.player) : (f.url || "");
-        } catch (e) {
-          directUrl = f.url || "";
-        }
-        
-        const proxyUrl = directUrl 
-          ? `/api/stream?url=${encodeURIComponent(directUrl)}${isNativeHeader ? '&native=true' : ''}` 
-          : "";
-
-        return {
-          url: directUrl,
-          proxyUrl: proxyUrl,
-          quality: f.quality_label || f.audio_quality || f.quality || 'Standard',
-          container: f.mime_type || 'video/mp4',
-          bitrate: f.bitrate,
-          id: f.itag
+        const processFormat = (f: any) => {
+          let directUrl = "";
+          try {
+            directUrl = f.decipher ? f.decipher(client.session.player) : (f.url || "");
+          } catch (e) {
+            directUrl = f.url || "";
+          }
+          const proxyUrl = directUrl 
+            ? `/api/stream?url=${encodeURIComponent(directUrl)}${isNative ? '&native=true' : ''}` 
+            : "";
+          return {
+            url: directUrl,
+            proxyUrl: proxyUrl,
+            quality: f.quality_label || f.audio_quality || f.quality || 'Standard',
+            container: f.mime_type || 'video/mp4',
+            bitrate: f.bitrate,
+            id: f.itag
+          };
         };
-      };
 
-      const audioFormats = adaptiveFormats.filter((f: any) => f.has_audio && !f.has_video).map(processFormat);
-      const videoFormats = [...regularFormats, ...adaptiveFormats.filter((f: any) => f.has_video)].map(processFormat);
+        const audioFormats = adaptiveFormats.filter((f: any) => f.has_audio && !f.has_video).map(processFormat);
+        const videoFormats = [...regularFormats, ...adaptiveFormats.filter((f: any) => f.has_video)].map(processFormat);
 
-      res.json({
-        id: videoId,
-        title: basicInfo?.title || "Untitled Video",
-        description: basicInfo?.short_description || basicInfo?.description || "",
-        thumbnails: basicInfo?.thumbnail || [],
-        author: {
-          name: basicInfo?.author || "Unknown Artist",
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${basicInfo?.author || 'YouTube'}`
-        },
-        viewCount: basicInfo?.view_count || "0",
-        publishDate: basicInfo?.is_live ? 'LIVE' : 'Recently',
-        formats: {
-          audio: audioFormats.length > 0 ? audioFormats : regularFormats.map(processFormat),
-          video: videoFormats
-        }
-      });
-    } catch (error: any) {
-      console.error(`Extraction error for ${videoId}:`, error.message);
-      const errorMsg = error.message || String(error) || "Unknown extraction error";
-      
-      // Try to return metadata at least
+        return res.json({
+          id: videoId,
+          title: basicInfo?.title || "Untitled Video",
+          description: basicInfo?.short_description || basicInfo?.description || "",
+          thumbnails: basicInfo?.thumbnail || [],
+          author: {
+            name: basicInfo?.author || "Unknown Artist",
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(basicInfo?.author || 'YouTube')}`
+          },
+          viewCount: basicInfo?.view_count || "0",
+          publishDate: basicInfo?.is_live ? 'LIVE' : 'Recently',
+          formats: {
+            audio: audioFormats.length > 0 ? audioFormats : regularFormats.map(processFormat),
+            video: videoFormats
+          }
+        });
+      }
+
+      // If we got here, Innertube failed. Try YTDL
       try {
-        const results = await yts({ videoId: videoId });
-        if (results) {
-           return res.json({
-             id: videoId,
-             title: (results as any).title,
-             thumbnails: [{ url: (results as any).thumbnail }],
-             author: { name: (results as any).author?.name },
-             error: true,
-             message: errorMsg,
-             fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
-           });
-        }
-      } catch (e) {}
+        const ytdlInfo = await ytdl.getInfo(videoId);
+        const formats = ytdlInfo.formats || [];
+        return res.json({
+          id: videoId,
+          title: ytdlInfo.videoDetails.title,
+          formats: {
+            audio: formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
+              url: f.url,
+              proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
+              quality: f.audioQuality || 'Standard',
+              container: f.mimeType || 'audio/mp4',
+              id: f.itag
+            })),
+            video: formats.filter(f => f.hasVideo).map(f => ({
+              url: f.url,
+              proxyUrl: `/api/stream?url=${encodeURIComponent(f.url || '')}`,
+              quality: f.qualityLabel || 'Standard',
+              container: f.mimeType || 'video/mp4',
+              id: f.itag
+            }))
+          }
+        });
+      } catch (yerr) {}
 
+      // Final fallback: Search metadata only
+      const searchRes = await yts({ videoId });
+      if (searchRes) {
+        return res.json({
+          id: videoId,
+          title: (searchRes as any).title,
+          thumbnails: [{ url: (searchRes as any).thumbnail }],
+          error: true,
+          message: "Streams unavailable on server. Please use native mode.",
+          isMetadataOnly: true
+        });
+      }
+      
+      throw new Error("All extraction methods failed");
+    } catch (error: any) {
+      console.error(`Final extraction failure for ${videoId}:`, error.message);
       res.status(500).json({ 
         error: "Extraction failed", 
-        message: errorMsg,
-        videoId: videoId,
-        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+        message: error.message,
+        videoId 
       });
     }
   });
