@@ -7,10 +7,7 @@ const rawAndroidBases = (import.meta.env.VITE_ANDROID_API_BASES || '')
 
 const DEFAULT_ANDROID_BASES = [
   (import.meta.env.VITE_ANDROID_API_BASE_URL || '').trim(),
-  ...rawAndroidBases,
-  'http://10.0.2.2:3000',
-  'http://localhost:3000',
-  'http://127.0.0.1:3000'
+  ...rawAndroidBases
 ].filter(Boolean);
 
 const explicitBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
@@ -30,7 +27,10 @@ function getCandidates(path: string): string[] {
 
   const platform = Capacitor.getPlatform();
   if (platform === 'android') {
-    return DEFAULT_ANDROID_BASES.map((base) => `${base.replace(/\/$/, '')}${normalizedPath}`);
+    if (DEFAULT_ANDROID_BASES.length > 0) {
+      return DEFAULT_ANDROID_BASES.map((base) => `${base.replace(/\/$/, '')}${normalizedPath}`);
+    }
+    return [normalizedPath];
   }
 
   return [normalizedPath];
@@ -80,8 +80,7 @@ export async function fetchJsonOrThrow(path: string, init?: RequestInit) {
     hasLoggedAndroidHint = true;
     console.warn(
       `[API] Android request failed for all candidates: ${urls.join(', ')}. ` +
-      `If this is a physical device, localhost/10.0.2.2 won't reach your computer. ` +
-      `Set VITE_API_BASE_URL or VITE_ANDROID_API_BASES to a reachable LAN/HTTPS backend.`
+      `Set VITE_API_BASE_URL or VITE_ANDROID_API_BASES to a reachable HTTPS/LAN backend for APK builds.`
     );
   }
 

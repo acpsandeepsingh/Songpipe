@@ -17,32 +17,37 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
   const [activeCategory, setActiveCategory] = useState('All');
   const [requestError, setRequestError] = useState('');
 
-  const mapNoKeyItems = (items: any[] = []) => {
-    return items
-      .map((item: any) => {
-        const id = item?.id?.videoId || item?.id;
-        if (!id) return null;
-        return {
-          id,
-          title: item?.snippet?.title || 'Untitled',
-          thumbnail: item?.snippet?.thumbnails?.high?.url || item?.snippet?.thumbnails?.medium?.url || item?.snippet?.thumbnails?.default?.url || '',
-          channelName: item?.snippet?.channelTitle || 'YouTube',
-          views: 'N/A views',
-          uploadedAt: item?.snippet?.publishedAt ? new Date(item.snippet.publishedAt).toLocaleDateString() : 'Recently',
-          duration: '--:--'
-        };
-      })
-      .filter(Boolean);
-  };
-
   const fetchNoKeyFallback = async (query?: string) => {
-    const endpoint = query
-      ? `https://yt.lemnoslife.com/noKey/search?part=snippet&type=video&maxResults=24&q=${encodeURIComponent(query)}`
-      : 'https://yt.lemnoslife.com/noKey/videos?part=snippet&chart=mostPopular&regionCode=US&videoCategoryId=10&maxResults=24';
-    const res = await fetch(endpoint);
-    if (!res.ok) throw new Error(`NoKey fallback failed: HTTP ${res.status}`);
-    const data = await res.json();
-    return mapNoKeyItems(data?.items || []);
+    const invidiousInstances = [
+      'https://invidious.fdn.fr',
+      'https://inv.nadeko.net',
+      'https://invidious.privacyredirect.com'
+    ];
+
+    for (const base of invidiousInstances) {
+      try {
+        const endpoint = query
+          ? `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video`
+          : `${base}/api/v1/trending?type=Music&region=US`;
+        const res = await fetch(endpoint);
+        if (!res.ok) continue;
+        const items = await res.json();
+        const normalized = (Array.isArray(items) ? items : []).map((item: any) => ({
+          id: item.videoId,
+          title: item.title || 'Untitled',
+          thumbnail: item.videoThumbnails?.[0]?.url || '',
+          channelName: item.author || 'YouTube',
+          views: item.viewCount ? `${item.viewCount} views` : 'N/A views',
+          uploadedAt: item.publishedText || 'Recently',
+          duration: item.lengthSeconds ? `${Math.floor(item.lengthSeconds / 60)}:${String(item.lengthSeconds % 60).padStart(2, '0')}` : '--:--'
+        })).filter((v: any) => v.id);
+        if (normalized.length > 0) return normalized;
+      } catch {
+        // try next instance
+      }
+    }
+
+    throw new Error('All public fallback providers failed');
   };
 
   useEffect(() => {
