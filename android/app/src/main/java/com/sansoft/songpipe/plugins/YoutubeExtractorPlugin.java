@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -143,9 +145,29 @@ public class YoutubeExtractorPlugin extends Plugin {
             try (Response res = FALLBACK_HTTP.newCall(req).execute()) {
                 if (!res.isSuccessful() || res.body() == null) return null;
                 String html = res.body().string();
-                Matcher m = Pattern.compile("\"url\":\"(https:[^\"]+mime=audio[^\"]+)\"").matcher(html);
-                if (!m.find()) return null;
-                String audioUrl = m.group(1).replace("\\u0026", "&").replace("\\/", "/");
+                String audioUrl = null;
+
+                // 1) Direct audio URL in escaped JSON
+                Matcher direct = Pattern.compile("\"url\":\"(https:[^\"]+?)\"[^\\{\\[]*?\"mimeType\":\"audio").matcher(html);
+                if (direct.find()) {
+                    audioUrl = direct.group(1).replace("\\u0026", "&").replace("\\/", "/");
+                }
+
+                // 2) signatureCipher/cipher fallback - extract embedded URL parameter
+                if (audioUrl == null) {
+                    Matcher cipher = Pattern.compile("\"(?:signatureCipher|cipher)\":\"([^\"]+?)\"[^\\{\\[]*?\"mimeType\":\"audio").matcher(html);
+                    if (cipher.find()) {
+                        String cipherText = cipher.group(1).replace("\\u0026", "&").replace("\\/", "/");
+                        for (String kv : cipherText.split("&")) {
+                            if (kv.startsWith("url=")) {
+                                audioUrl = URLDecoder.decode(kv.substring(4), StandardCharsets.UTF_8);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (audioUrl == null || audioUrl.isEmpty()) return null;
                 JSObject result = new JSObject();
                 result.put("id", videoId);
                 result.put("title", "YouTube Audio (Fallback)");
