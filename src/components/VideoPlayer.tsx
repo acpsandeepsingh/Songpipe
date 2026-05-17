@@ -72,6 +72,10 @@ export default function VideoPlayer({ video }: { video: any }) {
           }
         } catch (nativeErr) {
           console.warn("Native bridge unavailable or failed:", nativeErr);
+          setNativeInfo({
+            nativeMode: false,
+            error: (nativeErr as any)?.message || String(nativeErr)
+          });
         }
       }
 
