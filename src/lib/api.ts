@@ -2,9 +2,9 @@ import { Capacitor } from '@capacitor/core';
 
 const DEFAULT_ANDROID_BASES = [
   (import.meta.env.VITE_ANDROID_API_BASE_URL || '').trim(),
+  'http://10.0.2.2:3000',
   'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://10.0.2.2:3000'
+  'http://127.0.0.1:3000'
 ].filter(Boolean);
 
 const explicitBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
