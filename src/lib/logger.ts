@@ -22,6 +22,8 @@ interface RuntimeCall {
 class SessionLogger {
   private logs: LogEntry[] = [];
   private maxLogs = 100;
+  private dedupeWindowMs = 8000;
+  private recentLogKeys = new Map<string, number>();
   private startupChecks: StartupCheck[] = [
     { name: 'index.html loaded', status: 'pending' },
     { name: 'main JS bundle loaded', status: 'pending' },
@@ -105,6 +107,14 @@ class SessionLogger {
   }
 
   public add(type: LogEntry['type'], message: string, context?: any) {
+    const key = `${type}:${message}:${JSON.stringify(context || {})}`;
+    const now = Date.now();
+    const lastTs = this.recentLogKeys.get(key);
+    if (lastTs && now - lastTs < this.dedupeWindowMs) {
+      return;
+    }
+    this.recentLogKeys.set(key, now);
+
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       type,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal, ChevronDown, ChevronUp, Cpu, Music, Video } from 'lucide-react';
 import ExtractionDialog from './ExtractionDialog';
 import { db } from '../lib/firebase';
@@ -19,6 +19,7 @@ export default function VideoPlayer({ video }: { video: any }) {
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const configErrorLoggedForVideo = useRef<string | null>(null);
 
   useEffect(() => {
     async function checkLiked() {
@@ -70,7 +71,10 @@ export default function VideoPlayer({ video }: { video: any }) {
 
       const apiConfigError = getApiConfigError();
       if (apiConfigError) {
-        logger.add('error', apiConfigError, { file: 'src/components/VideoPlayer.tsx', videoId: video.id });
+        if (configErrorLoggedForVideo.current !== video.id) {
+          logger.add('error', apiConfigError, { file: 'src/components/VideoPlayer.tsx', videoId: video.id });
+          configErrorLoggedForVideo.current = video.id;
+        }
         throw new Error(apiConfigError);
       }
 
