@@ -12,6 +12,7 @@ import {
   doc, 
   writeBatch 
 } from 'firebase/firestore';
+import { getFullUrl } from '../lib/api';
 
 export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => void }) {
   const [history, setHistory] = useState<any[]>([]);
@@ -50,7 +51,7 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
     async function fetchDiscovery() {
       try {
         const timestamp = new Date().getTime();
-        const res = await fetch(`/api/trending?t=${timestamp}`);
+        const res = await fetch(getFullUrl(`/api/trending?t=${timestamp}`));
         const data = await res.json();
         setTopSongs(data.items?.slice(0, 5) || []);
       } catch (err) {

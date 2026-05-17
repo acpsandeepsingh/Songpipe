@@ -10,13 +10,15 @@ import VideoGrid from './components/VideoGrid';
 import BottomNav from './components/BottomNav';
 import VideoPlayer from './components/VideoPlayer';
 import Library from './components/Library';
-import { ArrowLeft } from 'lucide-react';
+import ApiSettings from './components/ApiSettings';
+import { ArrowLeft, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -82,6 +84,13 @@ export default function App() {
               <div className="ml-2 font-bold truncate pr-4 text-sm flex-1">
                 {selectedVideo.title}
               </div>
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                title="API Settings"
+              >
+                <Settings className="w-5 h-5 opacity-40 hover:opacity-100 transition-opacity" />
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar">
@@ -113,6 +122,8 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      <ApiSettings isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }

@@ -9,10 +9,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.schabi.newpipe.extractor.NewPipe;
 import org.schabi.newpipe.extractor.StreamingService;
-
-import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.channel.ChannelInfo;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
+import org.schabi.newpipe.extractor.stream.StreamType;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 import org.schabi.newpipe.extractor.stream.AudioStream;
 import com.sansoft.songpipe.extractor.DownloaderImpl;
@@ -37,48 +36,6 @@ public class YoutubeExtractorPlugin extends Plugin {
         }
     }
 
-
-    private String getBestThumbnailUrl(List<Image> images) {
-        if (images == null || images.isEmpty()) {
-            return null;
-        }
-        return images.get(images.size() - 1).getUrl();
-    }
-
-
-
-    private String getChannelThumbnailUrl(ChannelInfo info) {
-        try {
-            Object thumbnails = info.getClass().getMethod("getThumbnails").invoke(info);
-            if (thumbnails instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Image> images = (List<Image>) thumbnails;
-                return getBestThumbnailUrl(images);
-            }
-        } catch (Exception ignored) {
-        }
-
-        try {
-            Object avatars = info.getClass().getMethod("getAvatars").invoke(info);
-            if (avatars instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Image> images = (List<Image>) avatars;
-                return getBestThumbnailUrl(images);
-            }
-        } catch (Exception ignored) {
-        }
-
-        try {
-            Object avatarUrl = info.getClass().getMethod("getAvatarUrl").invoke(info);
-            if (avatarUrl instanceof String) {
-                return (String) avatarUrl;
-            }
-        } catch (Exception ignored) {
-        }
-
-        return null;
-    }
-
     @PluginMethod
     public void extractVideo(PluginCall call) {
         String videoId = call.getString("videoId");
@@ -99,10 +56,10 @@ public class YoutubeExtractorPlugin extends Plugin {
             JSObject result = new JSObject();
             result.put("id", info.getId());
             result.put("title", info.getName());
-            result.put("thumbnail", getBestThumbnailUrl(info.getThumbnails()));
+            result.put("thumbnail", info.getThumbnailUrl());
             result.put("author", info.getUploaderName());
             result.put("views", info.getViewCount());
-            result.put("description", info.getDescription());
+            result.put("description", info.getDescription().getContent());
 
             JSObject formats = new JSObject();
             
@@ -153,14 +110,21 @@ public class YoutubeExtractorPlugin extends Plugin {
             JSObject result = new JSObject();
             result.put("id", info.getId());
             result.put("title", info.getName());
-            result.put("thumbnail", getChannelThumbnailUrl(info));
-            result.put("description", info.getDescription());
+            result.put("thumbnail", info.getThumbnailUrl());
+            result.put("description", info.getDescription().getContent());
             result.put("subscriberCount", info.getSubscriberCount());
 
             JSArray items = new JSArray();
-            // ChannelInfo in current extractor version does not expose related stream items directly.
-            // Keep response shape stable with an empty list for now.
-
+            for (org.schabi.newpipe.extractor.stream.StreamInfoItem item : info.getRelatedItems()) {
+                JSObject i = new JSObject();
+                i.put("id", item.getId());
+                i.put("title", item.getName());
+                i.put("thumbnail", item.getThumbnailUrl());
+                i.put("uploaderName", item.getUploaderName());
+                i.put("duration", item.getDuration());
+                i.put("viewCount", item.getViewCount());
+                items.put(i);
+            }
             result.put("items", items);
 
             call.resolve(result);

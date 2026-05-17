@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import VideoCard from './VideoCard';
 import CategoryBar from './CategoryBar';
 import { logger } from '../lib/logger';
-import { fetchJsonOrThrow } from '../lib/api';
+import { getFullUrl } from '../lib/api';
 
 export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelect: (video: any) => void, searchQuery: string }) {
   const [videos, setVideos] = useState<any[]>([]);
@@ -15,22 +15,38 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
       try {
         const timestamp = new Date().getTime();
         let queryParams = `t=${timestamp}`;
-        let endpoint = `/api/trending?${queryParams}`;
+        let endpoint = getFullUrl(`/api/trending?${queryParams}`);
         
         if (searchQuery) {
-          endpoint = `/api/search?q=${encodeURIComponent(searchQuery)}&${queryParams}`;
+          endpoint = getFullUrl(`/api/search?q=${encodeURIComponent(searchQuery)}&${queryParams}`);
         } else if (activeCategory !== 'All' && activeCategory !== 'Trending' && activeCategory !== "Today's Top") {
-          endpoint = `/api/search?q=${encodeURIComponent(activeCategory + ' songs')}&${queryParams}`;
+          endpoint = getFullUrl(`/api/search?q=${encodeURIComponent(activeCategory + ' songs')}&${queryParams}`);
         }
 
-        let data;
+        let response;
         try {
-          data = await fetchJsonOrThrow(endpoint);
+          response = await fetch(endpoint);
         } catch (e: any) {
-          logger.add('error', `Primary request failed for ${endpoint}`, { error: e.message });
+          logger.add('error', `Network connection failed for ${endpoint}`, { error: e.message });
+          // Second attempt with a short delay
           await new Promise(r => setTimeout(r, 1000));
-          data = await fetchJsonOrThrow(endpoint);
+          response = await fetch(endpoint);
         }
+
+        if (!response.ok) {
+           const errText = await response.text();
+           logger.add('error', `Server error ${response.status} on ${endpoint}`, { response: errText });
+           throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+           const body = await response.text();
+           logger.add('error', `Non-JSON response from ${endpoint}`, { body: body.substring(0, 500) });
+           throw new Error("Server returned an invalid response (not JSON)");
+        }
+        
+        const data = await response.json();
         logger.add('info', `Fetched ${data.items?.length || 0} videos for ${endpoint}`);
         
         if (data.items && data.items.length > 0) {
@@ -39,7 +55,7 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
           // If search yielded nothing, try a generic search instead of just showing empty
           if (searchQuery) {
              console.log("Search empty, trying generic music search...");
-             const fallbackRes = await fetch(`/api/search?q=popular music ${searchQuery}`);
+             const fallbackRes = await fetch(getFullUrl(`/api/search?q=popular music ${searchQuery}`));
              const fallbackData = await fallbackRes.json();
              if (fallbackData.items?.length > 0) {
                 setVideos(fallbackData.items);

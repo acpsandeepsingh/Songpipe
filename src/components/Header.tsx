@@ -126,7 +126,7 @@ export default function Header({ onSearch }: { onSearch: (query: string) => void
         <button className="p-2.5 hover:bg-black/10 rounded-full transition-colors hidden sm:block">
           <Bell className="w-6 h-6 text-white" />
         </button>
-        <button className="p-1 hover:bg-black/10 rounded-full transition-all active:scale-95">
+        <button className="p-1 hover:bg-black/10 rounded-full transition-all active:scale-95" onClick={() => (window as any).toggleApiSettings?.()}>
           <div className="w-8 h-8 bg-white text-red-600 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg uppercase">
             NP
           </div>

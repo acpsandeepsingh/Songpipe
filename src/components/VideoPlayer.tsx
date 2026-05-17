@@ -5,9 +5,9 @@ import { db } from '../lib/firebase';
 import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import YoutubeExtractor from '../lib/nativeBridge';
 import { Capacitor } from '@capacitor/core';
+import { getFullUrl } from '../lib/api';
 
 import { logger } from '../lib/logger';
-import { fetchJsonOrThrow, apiUrl } from '../lib/api';
 
 export default function VideoPlayer({ video }: { video: any }) {
   const [videoInfo, setVideoInfo] = useState<any>(null);
@@ -66,9 +66,17 @@ export default function VideoPlayer({ video }: { video: any }) {
         }
       }
 
-      const data = await fetchJsonOrThrow(`/api/video-info?id=${video.id}`, {
+      const response = await fetch(getFullUrl(`/api/video-info?id=${video.id}`), {
         headers: nativeHeaders
       });
+      
+      const contentType = response.headers.get("content-type");
+      if (contentType && !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Non-JSON response from server (possible IP ban or server error).`);
+      }
+      
+      const data = await response.json();
       
       // If native data is better (has formats when server doesn't), use it
       const finalData = (nativeData && nativeData.formats?.audio?.length > 0) ? nativeData : data;
@@ -86,7 +94,7 @@ export default function VideoPlayer({ video }: { video: any }) {
           watchedAt: new Date().toISOString()
         }, { merge: true });
       } catch (e) {
-        logger.add('warn', 'Failed to save Firestore history', { error: (e as any)?.message || String(e) });
+        console.error("Failed to save Firestore history", e);
         // Fallback to local if server/firestore fails
         const history = JSON.parse(localStorage.getItem('history') || '[]');
         const filtered = history.filter((v: any) => v.id !== video.id);
@@ -94,11 +102,7 @@ export default function VideoPlayer({ video }: { video: any }) {
       }
       
     } catch (error: any) {
-      logger.add('error', 'Failed to fetch video info', {
-        error: error?.message || String(error),
-        videoId: video.id,
-        endpoint: apiUrl(`/api/video-info?id=${video.id}`)
-      });
+      console.error("Failed to fetch video info:", error);
       setVideoInfo({ error: true, message: error.message || "Network Error" });
     } finally {
       setLoading(false);
