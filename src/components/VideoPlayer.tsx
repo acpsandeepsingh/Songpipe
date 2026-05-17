@@ -71,8 +71,13 @@ export default function VideoPlayer({ video }: { video: any }) {
 
       const apiConfigError = getApiConfigError();
       if (apiConfigError) {
+        if (nativeData && nativeData.formats?.audio?.length > 0) {
+          setVideoInfo(nativeData);
+          setLoading(false);
+          return;
+        }
         if (configErrorLoggedForVideo.current !== video.id) {
-          logger.add('error', apiConfigError, { file: 'src/components/VideoPlayer.tsx', videoId: video.id });
+          logger.add('warn', 'Backend URL missing; native extraction did not return playable formats.', { file: 'src/components/VideoPlayer.tsx', videoId: video.id });
           configErrorLoggedForVideo.current = video.id;
         }
         throw new Error(apiConfigError);
