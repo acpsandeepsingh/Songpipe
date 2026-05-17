@@ -17,6 +17,34 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
   const [activeCategory, setActiveCategory] = useState('All');
   const [requestError, setRequestError] = useState('');
 
+  const mapNoKeyItems = (items: any[] = []) => {
+    return items
+      .map((item: any) => {
+        const id = item?.id?.videoId || item?.id;
+        if (!id) return null;
+        return {
+          id,
+          title: item?.snippet?.title || 'Untitled',
+          thumbnail: item?.snippet?.thumbnails?.high?.url || item?.snippet?.thumbnails?.medium?.url || item?.snippet?.thumbnails?.default?.url || '',
+          channelName: item?.snippet?.channelTitle || 'YouTube',
+          views: 'N/A views',
+          uploadedAt: item?.snippet?.publishedAt ? new Date(item.snippet.publishedAt).toLocaleDateString() : 'Recently',
+          duration: '--:--'
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const fetchNoKeyFallback = async (query?: string) => {
+    const endpoint = query
+      ? `https://yt.lemnoslife.com/noKey/search?part=snippet&type=video&maxResults=24&q=${encodeURIComponent(query)}`
+      : 'https://yt.lemnoslife.com/noKey/videos?part=snippet&chart=mostPopular&regionCode=US&videoCategoryId=10&maxResults=24';
+    const res = await fetch(endpoint);
+    if (!res.ok) throw new Error(`NoKey fallback failed: HTTP ${res.status}`);
+    const data = await res.json();
+    return mapNoKeyItems(data?.items || []);
+  };
+
   useEffect(() => {
     async function fetchVideos() {
       setLoading(true);
@@ -62,8 +90,17 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
         }
       } catch (error: any) {
         logger.add('error', `Critical VideoGrid failure`, { error: error.message });
+        try {
+          const noKeyVideos = await fetchNoKeyFallback(searchQuery || undefined);
+          if (noKeyVideos.length > 0) {
+            setVideos(noKeyVideos);
+            setRequestError('Backend offline. Showing direct YouTube fallback feed.');
+            return;
+          }
+        } catch (fallbackError: any) {
+          logger.add('warn', 'NoKey fallback failed', { error: fallbackError?.message || String(fallbackError) });
+        }
         setRequestError(error?.message || 'Unknown network error');
-        // Even on error, show the fallback so the user sees SOMETHING
         setVideos(emergencyVideos);
       } finally {
         setLoading(false);
