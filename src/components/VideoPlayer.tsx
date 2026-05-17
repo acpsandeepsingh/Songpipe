@@ -183,11 +183,13 @@ export default function VideoPlayer({ video }: { video: any }) {
         <div className="w-20 h-20 bg-red-600/10 rounded-full flex items-center justify-center mb-6 border border-red-600/20">
           <Share2 className="w-10 h-10 text-red-600" />
         </div>
-        <h3 className="text-white font-black text-xl mb-3 tracking-tighter uppercase text-center">Extraction Blocked</h3>
-        <p className="text-sm text-[#aaa] mb-8 max-w-sm px-2 font-medium leading-relaxed text-center">
-          {videoInfo?.message?.includes('Sign in') 
-            ? "YouTube requires authentication for this content. Use the Original button." 
-            : "Video extraction failed. If you are on Android 15, please copy the System Logs using the icon in the top header and share them."}
+        <h3 className="text-white font-black text-xl mb-3 uppercase">Extraction Protocol Challenge</h3>
+        <p className="text-sm text-[#aaa] mb-8 max-w-sm px-2 font-medium leading-relaxed">
+          {videoInfo?.isMetadataOnly 
+            ? "Server restricted: This content requires Native Extraction to bypass regional signatures." 
+            : videoInfo?.message?.includes('Sign in') 
+              ? "YouTube restricted: High-security content detected. Use Native Mode."
+              : "Extraction failed due to YouTube's latest signature protocol updates."}
         </p>
 
         {videoInfo?.message && (

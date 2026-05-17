@@ -36,6 +36,23 @@ async function startServer() {
     next();
   });
 
+  // Data Normalizer (NewPipe Style)
+  const normalizeVideoData = (raw: any) => {
+    return {
+      id: raw.id || raw.videoId || raw.v,
+      title: raw.title?.toString() || "Untitled",
+      description: raw.description || raw.short_description || "",
+      thumbnail: raw.thumbnails?.[0]?.url || raw.thumbnail || raw.image || "",
+      author: {
+        name: raw.author?.name || raw.author || raw.channelName || "YouTube Artist",
+        avatar: raw.author?.thumbnails?.[0]?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(raw.author?.name || raw.author || 'YT')}`
+      },
+      views: raw.view_count?.toString() || raw.views?.toString() || "0",
+      published: raw.published?.toString() || raw.ago || "Recent",
+      duration: raw.duration?.toString() || raw.timestamp || "0:00"
+    };
+  };
+
   // Helper to ensure yt is ready
   const getYT = async () => {
     if (!yt) {
@@ -44,6 +61,7 @@ async function startServer() {
            generate_session_locally: true,
            fetch: (input: any, init: any) => fetch(input, { ...init, timeout: 15000 })
         });
+        console.log("InnerTube Client Created");
       } catch (e) {
         console.error("Innertube init failed:", e);
       }
@@ -54,58 +72,37 @@ async function startServer() {
   // Trending Music Endpoint
   app.get("/api/trending", async (req, res) => {
     try {
-      console.log("Fetching trending results via yt-search...");
-      let results: any;
+      console.log("Fetching trending music...");
+      const client = await getYT();
+      
+      let items: any[] = [];
+      
+      // Attempt 1: InnerTube Music Trending (Most accurate for music)
       try {
-        results = await yts("trending songs 2024 music");
-      } catch (err) {
-        console.warn("yt-search failed for trending, trying fallback query...");
-        results = await yts("latest hindi and english music 2024");
-      }
-      
-      if (!results || !results.videos || results.videos.length === 0) {
-        // Ultimate fallback: Try Innertube
-        try {
-          const client = await getYT();
-          const search = await client.search("trending music", { type: 'video' });
-          const items = search.results?.map((v: any) => ({
-            id: v.id,
-            title: v.title?.toString(),
-            thumbnail: v.thumbnails?.[0]?.url,
-            channelName: v.author?.name || 'YouTube',
-            views: v.view_count?.toString() || '0 views',
-            uploadedAt: v.published?.toString() || 'Trending',
-            duration: v.duration?.toString() || '0:00'
-          })) || [];
+        if (client) {
+          const trending = await client.getTrending();
+          // Find the Music section
+          const musicTab = trending.tabs.find((t: any) => t.title === 'Music' || t.title?.toString() === 'Music');
+          const videos = musicTab ? musicTab.content?.contents : trending.videos;
           
-          if (items.length > 0) return res.json({ items });
-        } catch (innerErr) {
-          console.error("Innertube trending fallback failed:", innerErr);
+          if (videos && videos.length > 0) {
+            items = videos.map((v: any) => normalizeVideoData(v));
+          }
         }
-
-        // Even more ultimate fallback: Raw fetch and scrape (Simulated for this demo)
-        return res.json({ 
-          items: [
-            { id: 'dQw4w9WgXcQ', title: 'Trending Fallback: Rick Astley', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', channelName: 'Official', views: '1B views', uploadedAt: '1 year ago', duration: '3:32' }
-          ] 
-        });
+      } catch (e) {
+        console.warn("Innertube trending failed, falling back to yt-search");
       }
-      
-      const items = (results.videos || []).slice(0, 40).map((v: any) => ({
-        id: v.videoId,
-        title: v.title,
-        thumbnail: v.thumbnail || v.image,
-        channelName: v.author?.name || 'Unknown',
-        channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(v.author?.name || 'YouTube')}`,
-        views: (v.views || 0).toLocaleString() + ' views',
-        uploadedAt: v.ago || 'Trending',
-        duration: v.timestamp || '0:00'
-      }));
+
+      // Attempt 2: Fallback to yt-search
+      if (items.length === 0) {
+        const results = await yts({ query: "trending music videos", type: 'video' });
+        items = results.videos.map(v => normalizeVideoData(v));
+      }
 
       res.json({ items });
     } catch (error: any) {
-      console.error("Trending fetch critical failure:", error);
-      res.json({ items: [], error: error.message });
+      console.error("Trending critical failure:", error);
+      res.status(500).json({ items: [], error: error.message });
     }
   });
 
@@ -115,42 +112,30 @@ async function startServer() {
       const query = req.query.q as string;
       if (!query) return res.status(400).json({ error: "Query required" });
       
-      console.log(`Searching for: ${query} via yt-search`);
-      let results: any;
+      console.log(`Searching for: ${query}`);
+      const client = await getYT();
+      let items: any[] = [];
+
+      // Attempt 1: InnerTube (Search provides more info)
       try {
-        results = await yts(query);
-      } catch (err) {
-        console.warn("yt-search failed for search, trying Innertube...");
-        const client = await getYT();
-        const search = await client.search(query, { type: 'video' });
-        const items = search.results?.map((v: any) => ({
-          id: v.id,
-          title: v.title?.toString(),
-          thumbnail: v.thumbnails?.[0]?.url,
-          channelName: v.author?.name || 'YouTube',
-          views: v.view_count?.toString() || '0 views',
-          uploadedAt: v.published?.toString() || 'Recently',
-          duration: v.duration?.toString() || '0:00'
-        })) || [];
-        return res.json({ items });
+        if (client) {
+          const search = await client.search(query, { type: 'video' });
+          items = search.results?.filter((v: any) => v.type === 'Video').map((v: any) => normalizeVideoData(v)) || [];
+        }
+      } catch (e) {
+        console.warn("Innertube search failed, falling back to yt-search");
       }
-      
-      const items = (results.videos || []).map((v: any) => ({
-        type: 'video',
-        id: v.videoId,
-        title: v.title,
-        thumbnail: v.thumbnail || v.image,
-        channelName: v.author?.name || 'Unknown',
-        channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(v.author?.name || 'YouTube')}`,
-        views: (v.views || 0).toLocaleString() + ' views',
-        uploadedAt: v.ago || 'Recently',
-        duration: v.timestamp || '0:00'
-      }));
+
+      // Attempt 2: yt-search
+      if (items.length === 0) {
+        const results = await yts(query);
+        items = results.videos.map(v => normalizeVideoData(v));
+      }
 
       res.json({ items });
     } catch (error: any) {
       console.error("Search critical failure:", error);
-      res.json({ items: [], error: error.message });
+      res.status(500).json({ items: [], error: error.message });
     }
   });
 
@@ -285,10 +270,12 @@ async function startServer() {
       
       let info: any;
       try {
+        // Try getting info with the default client
         info = await client.getInfo(videoId);
       } catch (e: any) {
-        console.warn(`Innertube failed for ${videoId}, trying ytdl-core fallback...`);
-        // We'll fall back to search later if ytdl also fails
+        console.warn(`Primary extraction failed for ${videoId}: ${e.message}`);
+        // NewPipe-like fallback: Try a different endpoint or client configuration if possible
+        // For now, we'll rely on our existing fallbacks below if info remains null
       }
 
       if (info) {
@@ -300,6 +287,7 @@ async function startServer() {
         const processFormat = (f: any) => {
           let directUrl = "";
           try {
+            // Deciphering is key for high-quality formats, same as NewPipe
             directUrl = f.decipher ? f.decipher(client.session.player) : (f.url || "");
           } catch (e) {
             directUrl = f.url || "";
@@ -320,17 +308,10 @@ async function startServer() {
         const audioFormats = adaptiveFormats.filter((f: any) => f.has_audio && !f.has_video).map(processFormat);
         const videoFormats = [...regularFormats, ...adaptiveFormats.filter((f: any) => f.has_video)].map(processFormat);
 
+        const normalized = normalizeVideoData(basicInfo);
+
         return res.json({
-          id: videoId,
-          title: basicInfo?.title || "Untitled Video",
-          description: basicInfo?.short_description || basicInfo?.description || "",
-          thumbnails: basicInfo?.thumbnail || [],
-          author: {
-            name: basicInfo?.author || "Unknown Artist",
-            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(basicInfo?.author || 'YouTube')}`
-          },
-          viewCount: basicInfo?.view_count || "0",
-          publishDate: basicInfo?.is_live ? 'LIVE' : 'Recently',
+          ...normalized,
           formats: {
             audio: audioFormats.length > 0 ? audioFormats : regularFormats.map(processFormat),
             video: videoFormats
@@ -338,13 +319,12 @@ async function startServer() {
         });
       }
 
-      // If we got here, Innertube failed. Try YTDL
+      // Fallback 1: YTDL-Core
       try {
         const ytdlInfo = await ytdl.getInfo(videoId);
         const formats = ytdlInfo.formats || [];
         return res.json({
-          id: videoId,
-          title: ytdlInfo.videoDetails.title,
+          ...normalizeVideoData(ytdlInfo.videoDetails),
           formats: {
             audio: formats.filter(f => f.hasAudio && !f.hasVideo).map(f => ({
               url: f.url,
@@ -364,20 +344,18 @@ async function startServer() {
         });
       } catch (yerr) {}
 
-      // Final fallback: Search metadata only
+      // Fallback 2: Metadata only (yt-search)
       const searchRes = await yts({ videoId });
       if (searchRes) {
         return res.json({
-          id: videoId,
-          title: (searchRes as any).title,
-          thumbnails: [{ url: (searchRes as any).thumbnail }],
+          ...normalizeVideoData(searchRes),
           error: true,
-          message: "Streams unavailable on server. Please use native mode.",
+          message: "Video streams unavailable on server. Try Native Mode.",
           isMetadataOnly: true
         });
       }
       
-      throw new Error("All extraction methods failed");
+      throw new Error("All extraction methods failed for this video");
     } catch (error: any) {
       console.error(`Final extraction failure for ${videoId}:`, error.message);
       res.status(500).json({ 
