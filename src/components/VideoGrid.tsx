@@ -39,6 +39,13 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
            throw new Error(`HTTP ${response.status}`);
         }
         
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+           const body = await response.text();
+           logger.add('error', `Non-JSON response from ${endpoint}`, { body: body.substring(0, 500) });
+           throw new Error("Server returned an invalid response (not JSON)");
+        }
+        
         const data = await response.json();
         logger.add('info', `Fetched ${data.items?.length || 0} videos for ${endpoint}`);
         

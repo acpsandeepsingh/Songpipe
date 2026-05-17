@@ -16,9 +16,30 @@ export default function Header({ onSearch }: { onSearch: (query: string) => void
 
   const copySessionLog = () => {
     const text = logger.getFullLog();
-    navigator.clipboard.writeText(text).then(() => {
-      alert("System Logs copied!");
-    });
+    // Use an invisible textarea for cross-browser reliability on mobile
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        alert("COMPLETED: System Logs copied to clipboard!\nPlease paste them in the developer chat.");
+      } else {
+        throw new Error('Copy command failed');
+      }
+    } catch (err) {
+      alert("ERROR: Manual copy required. Check console for log dump.");
+      console.log("--- SYSTEM LOG DUMP ---");
+      console.log(text);
+    } finally {
+      document.body.removeChild(textarea);
+    }
   };
 
   if (isMobileSearchOpen) {
@@ -63,10 +84,13 @@ export default function Header({ onSearch }: { onSearch: (query: string) => void
       <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         <button 
           onClick={copySessionLog}
-          className="p-2 hover:bg-black/10 rounded-full transition-colors"
-          title="Copy System Logs"
+          className="p-2 hover:bg-black/10 rounded-full transition-colors group relative"
+          title="Diagnostic Logs"
         >
-          <Terminal className="w-6 h-6 text-white" />
+          <Terminal className="w-6 h-6 text-white active:scale-90 transition-transform" />
+          <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity">
+            COPY SYSTEM LOGS
+          </span>
         </button>
         <div className="flex items-center gap-2 cursor-pointer active:scale-95 transition-transform" onClick={() => window.location.reload()}>
           <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-inner">

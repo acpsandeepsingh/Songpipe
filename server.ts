@@ -32,15 +32,14 @@ async function startServer() {
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) {
       console.log(`[API] ${req.method} ${req.path} ${req.query.id || ''}`);
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
     next();
   });
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-    }
+
+  // Global API Routing Protection
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Content-Type', 'application/json');
     next();
   });
 
@@ -372,10 +371,7 @@ async function startServer() {
         }
       }
 
-      const adaptiveFormats = streamingData?.adaptive_formats || [];
-      const regularFormats = streamingData?.formats || [];
-
-      const isNative = req.headers['x-native-mode'] === 'true';
+      const isNativeHeader = req.headers['x-native-mode'] === 'true' || req.query.native === 'true';
 
       const processFormat = (f: any) => {
         let directUrl = "";
@@ -386,7 +382,7 @@ async function startServer() {
         }
         
         const proxyUrl = directUrl 
-          ? `/api/stream?url=${encodeURIComponent(directUrl)}${isNative ? '&native=true' : ''}` 
+          ? `/api/stream?url=${encodeURIComponent(directUrl)}${isNativeHeader ? '&native=true' : ''}` 
           : "";
 
         return {
@@ -420,7 +416,9 @@ async function startServer() {
       });
     } catch (error: any) {
       console.error(`Extraction error for ${videoId}:`, error.message);
-      // Try to return at least something from yt-search if Innertube fails completely
+      const errorMsg = error.message || String(error) || "Unknown extraction error";
+      
+      // Try to return metadata at least
       try {
         const results = await yts({ videoId: videoId });
         if (results) {
@@ -430,15 +428,17 @@ async function startServer() {
              thumbnails: [{ url: (results as any).thumbnail }],
              author: { name: (results as any).author?.name },
              error: true,
-             message: error.message
+             message: errorMsg,
+             fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
            });
         }
       } catch (e) {}
 
       res.status(500).json({ 
         error: "Extraction failed", 
-        message: error.message,
-        videoId: videoId
+        message: errorMsg,
+        videoId: videoId,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
       });
     }
   });
