@@ -12,7 +12,6 @@ import org.schabi.newpipe.extractor.StreamingService;
 import org.schabi.newpipe.extractor.ServiceList;
 import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.channel.ChannelInfo;
-import org.schabi.newpipe.extractor.kiosk.KioskInfo;
 import org.schabi.newpipe.extractor.search.SearchInfo;
 import org.schabi.newpipe.extractor.InfoItem;
 import org.schabi.newpipe.extractor.stream.StreamInfoItem;
@@ -111,7 +110,9 @@ public class YoutubeExtractorPlugin extends Plugin {
     public void trending(PluginCall call) {
         Single.fromCallable(() -> {
             StreamingService service = ServiceList.YouTube;
-            return KioskInfo.getInfo(service, "Trending");
+            // Some extractor versions/devices fail kiosk resolution by id.
+            // Use public YouTube search as a stable "home/trending-like" feed.
+            return SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery("trending music videos"));
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
