@@ -112,7 +112,9 @@ export default function VideoPlayer({ video }: { video: any }) {
     );
   }
 
-  const bestVideo = videoInfo?.formats?.video?.[0]?.url;
+  const bestVideo = videoInfo?.formats?.video?.find((f: any) => f.quality.includes('720') || f.quality.includes('480'))?.proxyUrl 
+                  || videoInfo?.formats?.video?.[0]?.proxyUrl 
+                  || videoInfo?.formats?.video?.[0]?.url;
 
   return (
     <div className="flex-1 select-none">
@@ -120,6 +122,7 @@ export default function VideoPlayer({ video }: { video: any }) {
         {bestVideo ? (
           <video 
             src={bestVideo} 
+            key={video.id} // Add key to force remount on video change
             controls 
             autoPlay 
             playsInline
@@ -127,7 +130,14 @@ export default function VideoPlayer({ video }: { video: any }) {
             poster={video.thumbnail}
             onError={(e) => {
                console.error("Video play error:", e);
-               // Handle source errors
+               // If proxy fails, try direct as last resort
+               const videoTag = e.currentTarget;
+               if (videoTag.src.includes('/api/stream')) {
+                  const originalUrl = videoInfo?.formats?.video?.[0]?.url;
+                  if (originalUrl && videoTag.src !== originalUrl) {
+                    videoTag.src = originalUrl;
+                  }
+               }
             }}
           />
         ) : (

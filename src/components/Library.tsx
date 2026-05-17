@@ -20,6 +20,8 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
+    
     // Real-time synchronization with Firestore for history
     const historyQ = query(
       collection(db, 'public_history'),
@@ -29,6 +31,8 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
 
     const historyUnsub = onSnapshot(historyQ, (snapshot) => {
       setHistory(snapshot.docs.map(doc => ({ ...doc.data() })));
+    }, (error) => {
+      console.error("History Firestore error:", error);
     });
 
     // Real-time synchronization for likes
@@ -39,16 +43,18 @@ export default function Library({ onVideoSelect }: { onVideoSelect: (v: any) => 
 
     const likesUnsub = onSnapshot(likesQ, (snapshot) => {
       setLikes(snapshot.docs.map(doc => ({ ...doc.data() })));
+    }, (error) => {
+      console.error("Likes Firestore error:", error);
     });
 
     async function fetchDiscovery() {
-      // Library should load from database mainly, so we keep discovery optional
       try {
-        const res = await fetch('/api/trending');
+        const timestamp = new Date().getTime();
+        const res = await fetch(`/api/trending?t=${timestamp}`);
         const data = await res.json();
         setTopSongs(data.items?.slice(0, 5) || []);
       } catch (err) {
-        console.error(err);
+        console.error("Discovery trending failed:", err);
       } finally {
         setLoading(false);
       }

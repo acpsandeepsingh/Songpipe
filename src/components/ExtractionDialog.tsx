@@ -43,18 +43,14 @@ export default function ExtractionDialog({ isOpen, onClose, videoInfo }: Extract
                   videoInfo.formats.audio.slice(0, 4).map((f: any, i: number) => (
                     <a
                       key={i}
-                      href={f.url}
+                      href={f.proxyUrl || f.url}
                       target="_blank"
                       download
                       className="flex items-center justify-between p-3 bg-white/5 hover:bg-red-600/20 active:bg-red-600 rounded-xl border border-white/5 transition-all group"
-                      onClick={(e) => {
-                         // In a real APK with capacitor, we could use a custom download plugin
-                         // For web, this opens the direct stream
-                      }}
                     >
                       <div className="flex flex-col">
                         <span className="text-sm font-bold">{f.quality}</span>
-                        <span className="text-[10px] text-[#aaa] group-hover:text-red-200 uppercase">{f.container.split('/')[1] || 'm4a'}</span>
+                        <span className="text-[10px] text-[#aaa] group-hover:text-red-200 uppercase">{f.container?.split(';')?.[0]?.split('/')?.[1] || 'm4a'}</span>
                       </div>
                       <Download className="w-5 h-5 text-red-500 group-hover:text-white" />
                     </a>
@@ -75,13 +71,13 @@ export default function ExtractionDialog({ isOpen, onClose, videoInfo }: Extract
                   videoInfo.formats.video.slice(0, 4).map((f: any, i: number) => (
                     <a
                       key={i}
-                      href={f.url}
+                      href={f.proxyUrl || f.url}
                       target="_blank"
                       className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all group"
                     >
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold">{f.qualityLabel}</span>
-                        <span className="text-[10px] text-[#aaa] uppercase">{f.container.split('/')[1] || 'mp4'}</span>
+                        <span className="text-sm font-bold">{f.quality}</span>
+                        <span className="text-[10px] text-[#aaa] uppercase">{f.container?.split(';')?.[0]?.split('/')?.[1] || 'mp4'}</span>
                       </div>
                       <Download className="w-5 h-5 text-white/40 group-hover:text-white" />
                     </a>

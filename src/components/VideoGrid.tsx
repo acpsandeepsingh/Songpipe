@@ -11,27 +11,29 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
     async function fetchVideos() {
       setLoading(true);
       try {
-        let endpoint = `/api/search?q=${encodeURIComponent(searchQuery || 'new music 2024')}`;
+        const timestamp = new Date().getTime();
+        let endpoint = `/api/search?q=${encodeURIComponent(searchQuery || 'new music 2024')}&t=${timestamp}`;
         
-        // Handle categories and trending
         if (!searchQuery) {
           if (activeCategory === 'All' || activeCategory === 'Trending' || activeCategory === "Today's Top") {
-            endpoint = '/api/trending';
+            endpoint = `/api/trending?t=${timestamp}`;
           } else {
-            endpoint = `/api/search?q=${encodeURIComponent(activeCategory + ' songs')}`;
+            endpoint = `/api/search?q=${encodeURIComponent(activeCategory + ' songs')}&t=${timestamp}`;
           }
         }
 
         const response = await fetch(endpoint);
         const data = await response.json();
         
-        if (data.items) {
+        if (data.items && data.items.length > 0) {
           setVideos(data.items);
         } else {
           setVideos([]);
+          console.warn("No items returned from search/trending");
         }
       } catch (error) {
         console.error("Failed to fetch videos:", error);
+        setVideos([]);
       } finally {
         setLoading(false);
       }
