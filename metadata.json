@@ -1,6 +1,6 @@
 {
-  "name": "NewPipe Web - YouTube Style",
-  "description": "A privacy-focused video client with a modern YouTube-inspired interface, built with React and Tailwind CSS.",
+  "name": "SongPipe",
+  "description": "A high-performance video and audio client by SanSoft.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

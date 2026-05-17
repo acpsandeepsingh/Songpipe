@@ -82,13 +82,25 @@ export default function ExtractionDialog({ isOpen, onClose, videoInfo }: Extract
                         </span>
                       </div>
                       <div className="flex gap-2">
-                         <a 
-                           href={f.proxyUrl || f.url} 
-                           target="_blank"
+                         <button 
+                           onClick={() => {
+                             if (import.meta.env.VITE_CAPACITOR_PLATFORM === 'android' || (window as any).Capacitor?.getPlatform() === 'android') {
+                               import('../lib/nativeDownload').then(m => {
+                                 m.default.downloadFile({
+                                   url: f.url,
+                                   filename: `${videoInfo.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${f.container?.split(';')?.[0]?.split('/')?.[1] || 'm4a'}`,
+                                   title: videoInfo.title
+                                 });
+                                 alert("Download started!");
+                               });
+                             } else {
+                               window.open(f.proxyUrl || f.url, '_blank');
+                             }
+                           }}
                            className="bg-white text-black px-5 py-2.5 rounded-full text-[10px] font-black shadow-lg shadow-white/5 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
                          >
-                            <Play className="w-3 h-3 fill-black" /> OPEN
-                         </a>
+                            <Download className="w-3 h-3" /> DOWNLOAD
+                         </button>
                          <button 
                            onClick={() => copyToClipboard(f.url)}
                            className="p-2.5 bg-white/5 rounded-full hover:bg-white/10 transition-colors"

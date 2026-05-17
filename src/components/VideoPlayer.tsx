@@ -47,22 +47,18 @@ export default function VideoPlayer({ video }: { video: any }) {
           console.log("Native extraction response:", nativeResult);
           setNativeInfo(nativeResult);
           
-          if (nativeResult.nativeMode || nativeResult.isNativeApk) {
+          if (nativeResult.nativeMode) {
              nativeHeaders = { 'X-Native-Mode': 'true' };
-             if (nativeResult.playerResponse) {
-                console.log("Native player response found, using high-priority parse...");
-                const parseRes = await fetch('/api/video-info-native', {
-                   method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
-                   body: JSON.stringify({ 
-                     videoId: video.id, 
-                     playerResponse: nativeResult.playerResponse 
-                   })
-                });
-                if (parseRes.ok) {
-                   nativeData = await parseRes.json();
-                }
-             }
+             // Map native result to the format expected by the app
+             nativeData = {
+                id: nativeResult.id,
+                title: nativeResult.title,
+                thumbnail: nativeResult.thumbnail,
+                author: { name: nativeResult.author },
+                views: nativeResult.views,
+                description: nativeResult.description,
+                formats: nativeResult.formats
+             };
           }
         } catch (nativeErr) {
           console.warn("Native bridge unavailable or failed:", nativeErr);
@@ -340,11 +336,35 @@ export default function VideoPlayer({ video }: { video: any }) {
               <Download className="w-5 h-5" /> <span>Download</span>
             </button>
 
-            <button className="flex items-center gap-2 bg-[#272727] px-5 py-2.5 rounded-xl hover:bg-[#3f3f3f] shrink-0 font-black text-sm transition-all active:scale-95">
+            <button 
+              onClick={() => {
+                if (videoInfo?.formats?.audio?.[0]) {
+                  import('../lib/nativePlayback').then(m => {
+                    m.default.play({
+                      url: videoInfo.formats.audio[0].url,
+                      title: videoInfo.title,
+                      artist: videoInfo.author?.name || 'YouTube',
+                      artUrl: videoInfo.thumbnail
+                    });
+                    alert("Background audio started!");
+                  });
+                } else {
+                  alert("No audio stream available for background play.");
+                }
+              }}
+              className="flex items-center gap-2 bg-[#272727] px-5 py-2.5 rounded-xl hover:bg-[#3f3f3f] shrink-0 font-black text-sm transition-all active:scale-95"
+            >
               <Music className="w-5 h-5 text-red-500" /> <span>Background</span>
             </button>
 
-            <button className="flex items-center gap-2 bg-[#272727] px-5 py-2.5 rounded-xl hover:bg-[#3f3f3f] shrink-0 font-black text-sm transition-all active:scale-95">
+            <button 
+              onClick={() => {
+                import('../lib/nativePlayback').then(m => {
+                  m.default.enterPip().catch(err => alert(err.message));
+                });
+              }}
+              className="flex items-center gap-2 bg-[#272727] px-5 py-2.5 rounded-xl hover:bg-[#3f3f3f] shrink-0 font-black text-sm transition-all active:scale-95"
+            >
               <Video className="w-5 h-5 text-blue-500" /> <span>Popup</span>
             </button>
             

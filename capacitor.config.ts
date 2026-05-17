@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'org.newpipe.web',
-  appName: 'NewPipe Web',
+  appId: 'com.sansoft.songpipe',
+  appName: 'SongPipe',
   webDir: 'dist',
   server: {
     androidScheme: 'https'
