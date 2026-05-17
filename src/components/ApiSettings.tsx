@@ -1,7 +1,8 @@
 
 import { useState, useEffect } from 'react';
-import { Settings, Save, X, Globe } from 'lucide-react';
+import { Settings, Save, X, Globe, ClipboardList, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { logger } from '../lib/logger';
 
 export default function ApiSettings({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
   const [url, setUrl] = useState('');
@@ -15,6 +16,16 @@ export default function ApiSettings({ isOpen, onClose }: { isOpen: boolean, onCl
     localStorage.setItem('VITE_API_URL', url);
     onClose();
     window.location.reload();
+  };
+
+  const copyStartupReport = async () => {
+    await navigator.clipboard.writeText(logger.getStartupReport());
+    alert('Startup diagnostic report copied.');
+  };
+
+  const copyErrorLog = async () => {
+    await navigator.clipboard.writeText(logger.getErrorOnlyLog());
+    alert('Runtime error log copied.');
   };
 
   if (!isOpen) return null;
@@ -60,6 +71,20 @@ export default function ApiSettings({ isOpen, onClose }: { isOpen: boolean, onCl
               className="w-full bg-white text-black py-4 rounded-2xl font-black text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
             >
               <Save className="w-5 h-5" /> SAVE & RELOAD
+            </button>
+
+            <button
+              onClick={copyStartupReport}
+              className="w-full bg-[#2a2a2a] text-white py-4 rounded-2xl font-black text-sm active:scale-95 transition-transform flex items-center justify-center gap-2 border border-white/10"
+            >
+              <ClipboardList className="w-5 h-5" /> COPY STARTUP FILE/CHECK REPORT
+            </button>
+
+            <button
+              onClick={copyErrorLog}
+              className="w-full bg-[#2a2a2a] text-white py-4 rounded-2xl font-black text-sm active:scale-95 transition-transform flex items-center justify-center gap-2 border border-red-500/40"
+            >
+              <AlertTriangle className="w-5 h-5 text-red-400" /> COPY CONSOLE ERROR LOG
             </button>
           </div>
         </motion.div>
