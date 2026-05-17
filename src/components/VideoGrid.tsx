@@ -8,10 +8,12 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
+  const [requestError, setRequestError] = useState('');
 
   useEffect(() => {
     async function fetchVideos() {
       setLoading(true);
+      setRequestError('');
       try {
         const timestamp = new Date().getTime();
         let queryParams = `t=${timestamp}`;
@@ -58,6 +60,7 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
         }
       } catch (error: any) {
         logger.add('error', `Critical VideoGrid failure`, { error: error.message });
+        setRequestError(error?.message || 'Unknown network error');
         // Even on error, show the fallback so the user sees SOMETHING
         setVideos([
           { id: 'kJQP7kiw5Fk', title: 'Connection Error? Try these classics:', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg', channelName: 'System', views: 'Check Connection', uploadedAt: 'Error', duration: '4:42' },
@@ -88,6 +91,12 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
         activeCategory={activeCategory} 
         onCategorySelect={(cat) => setActiveCategory(cat)} 
       />
+      {!!requestError && (
+        <div className="mx-3 sm:mx-0 mt-3 p-3 rounded-xl border border-red-900/40 bg-red-950/30">
+          <p className="text-xs font-bold text-red-300 mb-1">API Connectivity Error</p>
+          <p className="text-[11px] text-red-200/90 break-words">{requestError}</p>
+        </div>
+      )}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-2 sm:gap-y-10 pt-2 pb-10 px-3 sm:px-0">
           {[...Array(12)].map((_, i) => (
@@ -123,4 +132,3 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
     </div>
   );
 }
-

@@ -44,6 +44,7 @@ export function apiUrl(path: string): string {
 export async function fetchJsonOrThrow(path: string, init?: RequestInit) {
   const urls = /^https?:\/\//i.test(path) ? [path] : getCandidates(path);
   let lastError: Error | null = null;
+  const attemptErrors: string[] = [];
 
   for (const url of urls) {
     try {
@@ -71,6 +72,7 @@ export async function fetchJsonOrThrow(path: string, init?: RequestInit) {
       return parsed;
     } catch (error: any) {
       lastError = error instanceof Error ? error : new Error(String(error));
+      attemptErrors.push(`${url} -> ${lastError.message}`);
     }
   }
 
@@ -83,5 +85,9 @@ export async function fetchJsonOrThrow(path: string, init?: RequestInit) {
     );
   }
 
-  throw lastError || new Error(`Failed to fetch ${path}`);
+  const combined = attemptErrors.length > 0
+    ? `All API candidates failed for ${path}. Attempts: ${attemptErrors.join(' | ')}`
+    : `Failed to fetch ${path}`;
+
+  throw new Error(combined);
 }
