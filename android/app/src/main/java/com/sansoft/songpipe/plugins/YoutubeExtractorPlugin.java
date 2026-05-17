@@ -21,6 +21,7 @@ import org.schabi.newpipe.extractor.stream.AudioStream;
 import com.sansoft.songpipe.extractor.DownloaderImpl;
 
 import java.util.List;
+import java.util.ArrayList;
 
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.schedulers.Schedulers;
@@ -57,12 +58,23 @@ public class YoutubeExtractorPlugin extends Plugin {
 
         Single.fromCallable(() -> {
             StreamingService service = ServiceList.YouTube;
-            try {
-                return StreamInfo.getInfo(service, videoUrl);
-            } catch (Exception first) {
-                // Retry once because YouTube/Innertube occasionally returns transient "page needs reload" errors
-                return StreamInfo.getInfo(service, videoUrl);
+            List<String> candidateUrls = new ArrayList<>();
+            candidateUrls.add(videoUrl);
+            candidateUrls.add("https://m.youtube.com/watch?v=" + videoId);
+            candidateUrls.add("https://www.youtube.com/embed/" + videoId);
+
+            Exception last = null;
+            for (String candidate : candidateUrls) {
+                for (int attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        return StreamInfo.getInfo(service, candidate);
+                    } catch (Exception e) {
+                        last = e;
+                        try { Thread.sleep(450L * (attempt + 1)); } catch (InterruptedException ignored) {}
+                    }
+                }
             }
+            throw last != null ? last : new Exception("Native extraction failed");
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
