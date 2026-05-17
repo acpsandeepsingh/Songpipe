@@ -36,12 +36,12 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
     return (
       <div className="flex flex-col">
         <CategoryBar />
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-10 pt-2 pb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-2 sm:gap-y-10 pt-2 pb-10">
           {[...Array(8)].map((_, i) => (
-            <div key={i} className="flex flex-col gap-3 animate-pulse">
-              <div className="aspect-video bg-[#272727] rounded-xl" />
+            <div key={i} className="flex flex-col gap-3 animate-pulse px-3 sm:px-0 mb-4 sm:mb-0">
+              <div className="aspect-video bg-[#272727] sm:rounded-xl" />
               <div className="flex gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#272727]" />
+                <div className="w-10 h-10 rounded-full bg-[#272727]" />
                 <div className="flex flex-col gap-2 flex-1">
                   <div className="h-4 bg-[#272727] rounded w-full" />
                   <div className="h-4 bg-[#272727] rounded w-2/3" />
@@ -57,7 +57,7 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
   return (
     <div className="flex flex-col">
       <CategoryBar />
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-10 pt-2 pb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-0 sm:gap-y-8 pt-2 pb-10">
         {videos.map((video) => (
           <VideoCard 
             key={video.id} 

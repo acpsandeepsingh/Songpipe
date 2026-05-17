@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
+import ExtractionDialog from './ExtractionDialog';
 
 export default function VideoPlayer({ video }: { video: any }) {
   const [videoInfo, setVideoInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isExtractionOpen, setIsExtractionOpen] = useState(false);
+  const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   useEffect(() => {
     async function fetchInfo() {
@@ -23,21 +26,20 @@ export default function VideoPlayer({ video }: { video: any }) {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-4 animate-pulse">
-        <div className="aspect-video bg-[#272727] rounded-xl" />
-        <div className="h-8 bg-[#272727] rounded w-3/4" />
-        <div className="flex justify-between">
-          <div className="flex gap-4">
-             <div className="w-10 h-10 rounded-full bg-[#272727]" />
-             <div className="flex flex-col gap-2">
-                <div className="h-4 bg-[#272727] rounded w-24" />
-                <div className="h-4 bg-[#272727] rounded w-16" />
-             </div>
+      <div className="flex-1 flex flex-col gap-4 animate-pulse pt-2 sm:pt-0">
+        <div className="aspect-video bg-[#272727] sm:rounded-xl" />
+        <div className="px-4 sm:px-0 space-y-4">
+          <div className="h-6 bg-[#272727] rounded w-3/4" />
+          <div className="flex justify-between items-center">
+            <div className="flex gap-3 items-center">
+               <div className="w-10 h-10 rounded-full bg-[#272727]" />
+               <div className="flex flex-col gap-1">
+                  <div className="h-4 bg-[#272727] rounded w-24" />
+                  <div className="h-3 bg-[#272727] rounded w-16" />
+               </div>
+            </div>
           </div>
-          <div className="flex gap-2">
-             <div className="w-20 h-10 bg-[#272727] rounded-full" />
-             <div className="w-20 h-10 bg-[#272727] rounded-full" />
-          </div>
+          <div className="flex gap-2 bg-[#272727] h-10 rounded-full w-full" />
         </div>
       </div>
     );
@@ -45,15 +47,19 @@ export default function VideoPlayer({ video }: { video: any }) {
 
   if (!videoInfo || videoInfo.error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[400px] text-center p-6 bg-[#121212] rounded-xl border border-white/5">
-        <p className="text-red-500 font-bold mb-4">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] text-center p-8 bg-[#121212] sm:rounded-xl border border-white/5 mx-4 sm:mx-0">
+        <div className="w-16 h-16 bg-red-600/10 rounded-full flex items-center justify-center mb-4">
+          <Share2 className="w-8 h-8 text-red-500" />
+        </div>
+        <p className="text-white font-bold mb-2">Extraction Restricted</p>
+        <p className="text-sm text-[#aaa] mb-6 max-w-xs">
           {videoInfo?.isBotError 
-            ? "YouTube is blocking our automated data extraction (Bot Detection). Try again later or search for another video." 
-            : "Failed to load video details. Direct streaming might be restricted."}
+            ? "YouTube detected automated access. Please wait or try another video." 
+            : "This video has content restrictions that prevent direct extraction."}
         </p>
         <button 
           onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank')}
-          className="bg-white text-black px-6 py-2 rounded-full font-bold hover:bg-red-500 hover:text-white transition-colors"
+          className="bg-white text-black px-8 py-2.5 rounded-full font-bold hover:bg-white/90 transition-colors"
         >
           Watch on YouTube
         </button>
@@ -61,97 +67,107 @@ export default function VideoPlayer({ video }: { video: any }) {
     );
   }
 
-  // Find a suitable stream
-  const videoStream = videoInfo?.formats?.video?.[0]?.url;
-  const audioStream = videoInfo?.formats?.audio?.[0]?.url;
+  const bestVideo = videoInfo?.formats?.video?.[0]?.url;
 
   return (
-    <div className="flex-1">
-      <div className="aspect-video w-full bg-black rounded-xl overflow-hidden shadow-2xl relative">
-        {videoStream ? (
+    <div className="flex-1 select-none">
+      <div className="aspect-video w-full bg-black sm:rounded-xl overflow-hidden shadow-2xl relative group">
+        {bestVideo ? (
           <video 
-            src={videoStream} 
+            src={bestVideo} 
             controls 
             autoPlay 
+            playsInline
             className="w-full h-full"
             poster={video.thumbnail}
-          >
-             Your browser does not support the video tag.
-          </video>
+          />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
-             <p className="text-red-500 font-bold mb-4">Direct stream extraction might be restricted by YouTube.</p>
-             <button className="bg-white text-black px-6 py-2 rounded-full font-bold">Open in New Window</button>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-gradient-to-t from-black to-zinc-900">
+             <img src={video.thumbnail} className="absolute inset-0 w-full h-full object-cover opacity-20 blur-xl" alt="" />
+             <p className="relative z-10 text-white font-bold mb-4 px-4 text-center">Video player initialized. Use the extract button below for audio/video streams.</p>
+             <button 
+               onClick={() => setIsExtractionOpen(true)}
+               className="relative z-10 bg-red-600 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 shadow-xl hover:bg-red-700 transition-colors"
+             >
+                <Download className="w-5 h-5" /> Extract Content
+             </button>
           </div>
         )}
       </div>
       
-      <div className="mt-4 space-y-4">
-        <h1 className="text-xl font-bold leading-tight">{videoInfo.title}</h1>
+      <div className="mt-4 px-4 sm:px-0 space-y-4">
+        <h1 className="text-[18px] font-bold leading-tight tracking-tight">{videoInfo.title}</h1>
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <img src={video.channelAvatar} className="w-10 h-10 rounded-full" alt="" />
-            <div className="flex flex-col">
-              <span className="font-bold">{videoInfo.author.name}</span>
-              <span className="text-sm text-[#aaa]">{videoInfo.author.subscriber_count || '1.2M'} subscribers</span>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img src={video.channelAvatar} className="w-10 h-10 rounded-full border border-white/5" alt="" />
+              <div className="flex flex-col">
+                <span className="font-bold text-sm tracking-tight">{videoInfo.author.name}</span>
+                <span className="text-[11px] text-[#aaa] font-medium leading-none">{video.views}</span>
+              </div>
             </div>
-            <button className="ml-4 bg-white text-black px-4 py-2 rounded-full font-medium hover:bg-[#e5e5e5] transition-colors">
+            <button className="bg-white text-black px-5 py-2 rounded-full text-sm font-bold hover:bg-white/90 transition-colors active:scale-95">
               Subscribe
             </button>
           </div>
           
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 md:pb-0">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
             <div className="flex items-center bg-[#272727] rounded-full overflow-hidden shrink-0">
-              <button className="flex items-center gap-2 px-4 py-2 hover:bg-[#3f3f3f] border-r border-white/10">
-                <ThumbsUp className="w-5 h-5" /> <span>{video.views}</span>
+              <button className="flex items-center gap-2 px-4 py-2 hover:bg-[#3f3f3f] border-r border-white/5 transition-colors active:bg-white/10">
+                <ThumbsUp className="w-5 h-5" /> <span className="font-bold text-sm">{video.views}</span>
               </button>
-              <button className="px-4 py-2 hover:bg-[#3f3f3f]">
+              <button className="px-4 py-2 hover:bg-[#3f3f3f] transition-colors active:bg-white/10">
                 <ThumbsDown className="w-5 h-5" />
               </button>
             </div>
-            <button className="flex items-center gap-2 bg-[#272727] px-4 py-2 rounded-full hover:bg-[#3f3f3f] shrink-0">
+            
+            <button 
+              onClick={() => setIsExtractionOpen(true)}
+              className="flex items-center gap-2 bg-red-600 px-5 py-2 rounded-full hover:bg-red-700 shrink-0 font-bold text-sm shadow-lg active:scale-95 transition-all text-white"
+            >
+              <Download className="w-5 h-5" /> <span>Extract</span>
+            </button>
+
+            <button className="flex items-center gap-2 bg-[#272727] px-5 py-2 rounded-full hover:bg-[#3f3f3f] shrink-0 font-medium text-sm transition-colors active:bg-white/10">
               <Share2 className="w-5 h-5" /> <span>Share</span>
             </button>
             
-            {/* Extraction / Download Menu */}
-            <div className="relative group/menu">
-              <button className="flex items-center gap-2 bg-red-600 px-4 py-2 rounded-full hover:bg-red-700 shrink-0 font-bold">
-                <Download className="w-5 h-5" /> <span>Extract Audio</span>
-              </button>
-              <div className="absolute top-full right-0 mt-2 w-48 bg-[#272727] rounded-xl overflow-hidden shadow-xl hidden group-hover/menu:block z-50 border border-white/10">
-                <div className="p-2 text-xs text-[#aaa] font-bold border-b border-white/5">Available Songs/Audio</div>
-                {videoInfo.formats.audio.slice(0, 3).map((f: any, i: number) => (
-                  <a 
-                    key={i} 
-                    href={f.url} 
-                    download={`${videoInfo.title}.m4a`}
-                    target="_blank"
-                    className="block w-full px-4 py-2 text-sm text-white hover:bg-[#3f3f3f] transition-colors"
-                  >
-                    Download Audio ({f.quality})
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            <button className="p-2 bg-[#272727] rounded-full hover:bg-[#3f3f3f] shrink-0">
+            <button className="p-2.5 bg-[#272727] rounded-full hover:bg-[#3f3f3f] shrink-0 transition-colors active:bg-white/10">
               <MoreHorizontal className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="bg-[#272727] p-3 rounded-xl hover:bg-[#3f3f3f] cursor-pointer transition-colors group">
-          <div className="flex gap-2 font-bold text-sm">
-            <span>{video.views} views</span>
+        <div 
+          onClick={() => setIsDescExpanded(!isDescExpanded)}
+          className={`bg-[#202020] p-3 rounded-xl hover:bg-[#2a2a2a] cursor-pointer transition-all border border-white/5 ${isDescExpanded ? '' : 'max-h-24 overflow-hidden relative'}`}
+        >
+          <div className="flex gap-2 font-bold text-xs text-[#aaa] mb-1">
+            <span className="text-white">{video.views} views</span>
             <span>{video.uploadedAt}</span>
           </div>
-          <p className="text-sm mt-1 line-clamp-3 whitespace-pre-wrap">
+          <p className={`text-sm text-[#f1f1f1] leading-relaxed whitespace-pre-wrap ${!isDescExpanded && 'line-clamp-2'}`}>
              {videoInfo.description}
           </p>
-          <span className="text-sm font-bold mt-2 block">show less</span>
+          {!isDescExpanded && (
+            <div className="absolute bottom-0 right-0 left-0 h-10 bg-gradient-to-t from-[#202020] to-transparent pointer-events-none flex items-end justify-center pb-1">
+              <ChevronDown className="w-5 h-5 text-[#aaa]" />
+            </div>
+          )}
+          {isDescExpanded && (
+             <div className="pt-4 flex items-center justify-center text-[#aaa] font-bold text-xs">
+                SHOW LESS <ChevronUp className="ml-1 w-4 h-4" />
+             </div>
+          )}
         </div>
       </div>
+
+      <ExtractionDialog 
+        isOpen={isExtractionOpen} 
+        onClose={() => setIsExtractionOpen(false)} 
+        videoInfo={videoInfo}
+      />
     </div>
   );
 }

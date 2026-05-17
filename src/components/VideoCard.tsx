@@ -16,40 +16,40 @@ interface VideoCardProps {
 export default function VideoCard({ video, onClick }: VideoCardProps) {
   return (
     <div 
-      className="flex flex-col gap-3 group cursor-pointer"
+      className="flex flex-col gap-2 group cursor-pointer active:bg-white/5 transition-colors"
       onClick={onClick}
     >
-      <div className="relative aspect-video rounded-xl overflow-hidden bg-[#272727]">
+      <div className="relative aspect-video overflow-hidden bg-[#272727] sm:rounded-xl">
         <img 
           src={video.thumbnail} 
           alt={video.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-cover"
           referrerPolicy="no-referrer"
         />
-        <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[12px] font-medium text-white">
+        <div className="absolute bottom-2 right-2 bg-black/90 px-1.5 py-0.5 rounded text-[11px] font-bold text-white">
           {video.duration}
         </div>
       </div>
       
-      <div className="flex gap-3 pr-4">
-        <div className="shrink-0">
+      <div className="flex gap-3 px-3 pb-4 sm:px-0">
+        <div className="shrink-0 mt-1">
           <img 
             src={video.channelAvatar} 
             alt={video.channelName}
-            className="w-9 h-9 rounded-full object-cover"
+            className="w-10 h-10 rounded-full object-cover border border-white/5"
             referrerPolicy="no-referrer"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <h3 className="text-white font-medium leading-tight line-clamp-2 text-[16px]">
+        <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
+          <h3 className="text-white font-medium leading-tight line-clamp-2 text-[15px] tracking-tight">
             {video.title}
           </h3>
-          <div className="flex flex-col text-[#aaaaaa] text-[14px]">
-            <span className="hover:text-white transition-colors">{video.channelName}</span>
-            <div className="flex items-center after:content-['•'] after:mx-1 after:text-[10px]">
-              <span>{video.views} views</span>
-              <span className="ml-1">{video.uploadedAt}</span>
-            </div>
+          <div className="flex items-center text-[#aaaaaa] text-[13px] gap-1 overflow-hidden whitespace-nowrap">
+            <span className="truncate">{video.channelName}</span>
+            <span className="shrink-0">·</span>
+            <span className="shrink-0">{video.views}</span>
+            <span className="shrink-0">·</span>
+            <span className="shrink-0">{video.uploadedAt}</span>
           </div>
         </div>
       </div>

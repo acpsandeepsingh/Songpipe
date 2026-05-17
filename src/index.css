@@ -1,23 +1,25 @@
 @import "tailwindcss";
 
-@layer utilities {
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 8px;
+@layer base {
+  :root {
+    --safe-area-inset-top: env(safe-area-inset-top);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom);
   }
   
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+  body {
+    @apply bg-[#0f0f0f] text-white antialiased overflow-x-hidden select-none;
+    -webkit-tap-highlight-color: transparent;
   }
-  
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 10px;
-  }
-  
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: #717171;
-  }
+}
 
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

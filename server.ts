@@ -10,8 +10,11 @@ async function startServer() {
   
   let yt: Innertube;
   try {
-    yt = await Innertube.create();
-    console.log("YouTube InnerTube initialized");
+    yt = await Innertube.create({
+      generate_session_locals: true,
+      retrieve_player: true
+    });
+    console.log("YouTube InnerTube initialized (Android/Web hybrid)");
   } catch (err) {
     console.error("Failed to initialize InnerTube:", err);
   }
