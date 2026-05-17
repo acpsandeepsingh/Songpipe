@@ -9,6 +9,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.schabi.newpipe.extractor.NewPipe;
 import org.schabi.newpipe.extractor.StreamingService;
+import org.schabi.newpipe.extractor.ServiceList;
 import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.channel.ChannelInfo;
 import org.schabi.newpipe.extractor.kiosk.KioskInfo;
@@ -56,8 +57,13 @@ public class YoutubeExtractorPlugin extends Plugin {
         String videoUrl = "https://www.youtube.com/watch?v=" + videoId;
 
         Single.fromCallable(() -> {
-            StreamingService service = NewPipe.getServiceByUrl(videoUrl);
-            return StreamInfo.getInfo(service, videoUrl);
+            StreamingService service = ServiceList.YouTube;
+            try {
+                return StreamInfo.getInfo(service, videoUrl);
+            } catch (Exception first) {
+                // Retry once because YouTube/Innertube occasionally returns transient "page needs reload" errors
+                return StreamInfo.getInfo(service, videoUrl);
+            }
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
@@ -104,7 +110,7 @@ public class YoutubeExtractorPlugin extends Plugin {
     @PluginMethod
     public void trending(PluginCall call) {
         Single.fromCallable(() -> {
-            StreamingService service = NewPipe.getServiceByUrl("https://www.youtube.com");
+            StreamingService service = ServiceList.YouTube;
             return KioskInfo.getInfo(service, "Trending");
         })
         .subscribeOn(Schedulers.io())
@@ -140,7 +146,7 @@ public class YoutubeExtractorPlugin extends Plugin {
         }
 
         Single.fromCallable(() -> {
-            StreamingService service = NewPipe.getServiceByUrl("https://www.youtube.com");
+            StreamingService service = ServiceList.YouTube;
             return SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery(query));
         })
         .subscribeOn(Schedulers.io())
