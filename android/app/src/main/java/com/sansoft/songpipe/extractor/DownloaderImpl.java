@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
@@ -59,7 +60,16 @@ public final class DownloaderImpl extends Downloader {
         final okhttp3.Request.Builder requestBuilder = new okhttp3.Request.Builder()
                 .method(httpMethod, requestBody)
                 .url(url)
-                .addHeader("User-Agent", USER_AGENT);
+                .addHeader("User-Agent", USER_AGENT)
+                .addHeader("Accept-Language", "en-US,en;q=0.9")
+                .addHeader("Referer", "https://www.youtube.com/");
+
+        if (!mCookies.isEmpty()) {
+            String cookieHeader = mCookies.entrySet().stream()
+                    .map(e -> e.getKey() + "=" + e.getValue())
+                    .collect(Collectors.joining("; "));
+            requestBuilder.addHeader("Cookie", cookieHeader);
+        }
 
         headers.forEach((headerName, headerValueList) -> {
             requestBuilder.removeHeader(headerName);
@@ -70,6 +80,12 @@ public final class DownloaderImpl extends Downloader {
         try (okhttp3.Response response = client.newCall(requestBuilder.build()).execute()) {
             if (response.code() == 429) {
                 throw new ReCaptchaException("reCaptcha Challenge requested", url);
+            }
+
+            List<String> setCookies = response.headers("Set-Cookie");
+            for (String setCookie : setCookies) {
+                String[] pair = setCookie.split(";", 2)[0].split("=", 2);
+                if (pair.length == 2) mCookies.put(pair[0].trim(), pair[1].trim());
             }
 
             String responseBodyToReturn = null;

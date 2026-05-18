@@ -25,6 +25,8 @@ export interface VideoInfo {
 export interface YoutubeExtractorPlugin {
   extractVideo(options: { videoId: string }): Promise<VideoInfo>;
   getNativeHeaders(): Promise<Record<string, string>>;
+  search(options: { query: string }): Promise<{ items: any[] }>;
+  trending(): Promise<{ items: any[] }>;
 }
 
 const YoutubeExtractor = registerPlugin<YoutubeExtractorPlugin>('YoutubeExtractor');

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import VideoGrid from './components/VideoGrid';
@@ -13,12 +13,22 @@ import Library from './components/Library';
 import ApiSettings from './components/ApiSettings';
 import { ArrowLeft, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { logger } from './lib/logger';
 
 export default function App() {
+  logger.markFileLoaded('src/App.tsx', 'component initialized');
+  logger.markFunctionCall('src/App.tsx', 'App()', { screen: 'root' });
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    (window as any).toggleApiSettings = () => setIsSettingsOpen(true);
+    return () => {
+      delete (window as any).toggleApiSettings;
+    };
+  }, []);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -127,4 +137,3 @@ export default function App() {
     </div>
   );
 }
-

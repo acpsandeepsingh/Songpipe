@@ -2,19 +2,53 @@ import { useEffect, useState } from 'react';
 import VideoCard from './VideoCard';
 import CategoryBar from './CategoryBar';
 import { logger } from '../lib/logger';
-import { getFullUrl } from '../lib/api';
+import { getFullUrl, getApiConfigError } from '../lib/api';
+import YoutubeExtractor from '../lib/nativeBridge';
+import { Capacitor } from '@capacitor/core';
 
 export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelect: (video: any) => void, searchQuery: string }) {
+  logger.markFileLoaded('src/components/VideoGrid.tsx', 'component rendered');
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
 
   useEffect(() => {
+    const localCatalog = [
+      { id: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito ft. Daddy Yankee', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg', channelName: 'LuisFonsiVEVO', views: '8.4B views', uploadedAt: '7 years ago', duration: '4:42' },
+      { id: 'pAgnJDJN4VA', title: 'Ed Sheeran - Shape of You [Official Video]', thumbnail: 'https://i.ytimg.com/vi/pAgnJDJN4VA/hqdefault.jpg', channelName: 'Ed Sheeran', views: '6.2B views', uploadedAt: '7 years ago', duration: '4:24' },
+      { id: 'dQw4w9WgXcQ', title: 'Rick Astley - Never Gonna Give You Up', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', channelName: 'RickAstleyVEVO', views: '1.5B views', uploadedAt: '14 years ago', duration: '3:33' },
+      { id: '9bZkp7q19f0', title: 'PSY - GANGNAM STYLE(강남스타일) M/V', thumbnail: 'https://i.ytimg.com/vi/9bZkp7q19f0/hqdefault.jpg', channelName: 'Officialpsy', views: '5B views', uploadedAt: '11 years ago', duration: '4:12' }
+    ];
+
     async function fetchVideos() {
+      logger.markFunctionCall('src/components/VideoGrid.tsx', 'fetchVideos', { searchQuery, activeCategory });
       setLoading(true);
       try {
         const timestamp = new Date().getTime();
         let queryParams = `t=${timestamp}`;
+        const apiConfigError = getApiConfigError();
+        if (apiConfigError) {
+          logger.add('warn', `Running in local extraction mode (no backend URL).`, { file: 'src/components/VideoGrid.tsx' });
+          if (Capacitor.getPlatform() === 'android') {
+            try {
+              const nativeResult = searchQuery
+                ? await YoutubeExtractor.search({ query: searchQuery })
+                : await YoutubeExtractor.trending();
+              if (nativeResult?.items?.length > 0) {
+                setVideos(nativeResult.items);
+                return;
+              }
+            } catch (e: any) {
+              logger.add('warn', 'Native search/trending failed, using local catalog.', { error: e?.message });
+            }
+          }
+          const filtered = searchQuery
+            ? localCatalog.filter(v => `${v.title} ${v.channelName}`.toLowerCase().includes(searchQuery.toLowerCase()))
+            : localCatalog;
+          setVideos(filtered);
+          return;
+        }
+
         let endpoint = getFullUrl(`/api/trending?${queryParams}`);
         
         if (searchQuery) {
@@ -22,6 +56,8 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
         } else if (activeCategory !== 'All' && activeCategory !== 'Trending' && activeCategory !== "Today's Top") {
           endpoint = getFullUrl(`/api/search?q=${encodeURIComponent(activeCategory + ' songs')}&${queryParams}`);
         }
+
+        if (!endpoint) throw new Error('API endpoint unavailable. Configure API URL in settings.');
 
         let response;
         try {
@@ -55,7 +91,9 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
           // If search yielded nothing, try a generic search instead of just showing empty
           if (searchQuery) {
              console.log("Search empty, trying generic music search...");
-             const fallbackRes = await fetch(getFullUrl(`/api/search?q=popular music ${searchQuery}`));
+             const fallbackEndpoint = getFullUrl(`/api/search?q=popular music ${searchQuery}`);
+             if (!fallbackEndpoint) throw new Error('Fallback API endpoint unavailable');
+             const fallbackRes = await fetch(fallbackEndpoint);
              const fallbackData = await fallbackRes.json();
              if (fallbackData.items?.length > 0) {
                 setVideos(fallbackData.items);
@@ -64,16 +102,13 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
           }
           
           // ABSOLUTE EMERGENCY FALLBACK: Hardcoded popular videos
-          setVideos([
-            { id: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito ft. Daddy Yankee', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg', channelName: 'LuisFonsiVEVO', views: '8.4B views', uploadedAt: '7 years ago', duration: '4:42' },
-            { id: 'pAgnJDJN4VA', title: 'Ed Sheeran - Shape of You [Official Video]', thumbnail: 'https://i.ytimg.com/vi/pAgnJDJN4VA/hqdefault.jpg', channelName: 'Ed Sheeran', views: '6.2B views', uploadedAt: '7 years ago', duration: '4:24' },
-            { id: 'dQw4w9WgXcQ', title: 'Rick Astley - Never Gonna Give You Up', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', channelName: 'RickAstleyVEVO', views: '1.5B views', uploadedAt: '14 years ago', duration: '3:33' },
-            { id: '9bZkp7q19f0', title: 'PSY - GANGNAM STYLE(강남스타일) M/V', thumbnail: 'https://i.ytimg.com/vi/9bZkp7q19f0/hqdefault.jpg', channelName: 'Officialpsy', views: '5B views', uploadedAt: '11 years ago', duration: '4:12' }
-          ]);
+          setVideos(localCatalog);
           console.warn("No items returned from search/trending, using fallback");
         }
       } catch (error: any) {
-        logger.add('error', `Critical VideoGrid failure`, { error: error.message });
+        if (!error?.message?.includes('Backend API URL is not configured')) {
+          logger.add('error', `Critical VideoGrid failure`, { error: error.message });
+        }
         // Even on error, show the fallback so the user sees SOMETHING
         setVideos([
           { id: 'kJQP7kiw5Fk', title: 'Connection Error? Try these classics:', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg', channelName: 'System', views: 'Check Connection', uploadedAt: 'Error', duration: '4:42' },
@@ -139,4 +174,3 @@ export default function VideoGrid({ onVideoSelect, searchQuery }: { onVideoSelec
     </div>
   );
 }
-

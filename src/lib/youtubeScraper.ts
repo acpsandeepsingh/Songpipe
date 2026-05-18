@@ -79,7 +79,7 @@ export class YouTubeScraper {
       // Pattern 1: ytInitialPlayerResponse = {...}
       let start = html.indexOf('ytInitialPlayerResponse = ');
       if (start !== -1) {
-        start += 'ytInitialPlayerResponse = '.length();
+        start += 'ytInitialPlayerResponse = '.length;
         const end = html.indexOf(';</script>', start);
         if (end !== -1) return JSON.parse(html.substring(start, end));
       }
@@ -138,9 +138,23 @@ export class YouTubeScraper {
       }
 
       // Try 3: Search within the whole HTML for "ytInitialData":{...}
-      const match = html.match(/"ytInitialData":(\{.+?\})/);
-      if (match) {
-        return this.extractVideos(JSON.parse(match[1]));
+      const marker = '"ytInitialData":';
+      const markerIndex = html.indexOf(marker);
+      if (markerIndex !== -1) {
+        let start = markerIndex + marker.length;
+        while (start < html.length && /\s/.test(html[start])) start++;
+        if (html[start] === '{') {
+          let depth = 0;
+          for (let i = start; i < html.length; i++) {
+            if (html[i] === '{') depth++;
+            else if (html[i] === '}') {
+              depth--;
+              if (depth === 0) {
+                return this.extractVideos(JSON.parse(html.substring(start, i + 1)));
+              }
+            }
+          }
+        }
       }
 
       return [];
